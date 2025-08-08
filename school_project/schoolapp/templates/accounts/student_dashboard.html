@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<form action="{% url 'logout' %}" method="post" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger float-end">Logout</button>
+</form>
+<div class="container mt-5">
+    <h2 class="mb-4">Talaba ma'lumotlari</h2>
+    <table class="table table-bordered align-middle" style="background: #fff;">
+        <tr>
+            <td rowspan="15" style="width:180px; text-align:center;">
+                {% if student.profile_photo %}
+                    <img src="{{ student.profile_photo.url }}" alt="Student Image" style="max-width:150px; max-height:180px; border-radius:8px;">
+                {% else %}
+                    <p>No image available</p>
+                {% endif %}
+            </td>
+            <th>Fuqarolik</th>
+            <td>{{ student.citizenship|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Pasport raqami</th>
+            <td>{{ student.passport_number|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>JSHSHIR-kod</th>
+            <td>{{ student.jshshir_code|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Familiya</th>
+            <td>{{ student.last_name }}</td>
+        </tr>
+        <tr>
+            <th>Ismi</th>
+            <td>{{ student.name }}</td>
+        </tr>
+        <tr>
+            <th>Otasining ismi</th>
+            <td>{{ student.middle_name|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Tug‘ilgan sana</th>
+            <td>{{ student.date_of_birth }}</td>
+        </tr>
+        <tr>
+            <th>Jins</th>
+            <td>{{ student.gender }}</td>
+        </tr>
+        <tr>
+            <th>Millat</th>
+            <td>{{ student.nationality|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Davlat</th>
+            <td>{{ student.country|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Viloyat</th>
+            <td>{{ student.region|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Tuman</th>
+            <td>{{ student.district|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Uy manzili</th>
+            <td>{{ student.address|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Email</th>
+            <td>{{ student.email }}</td>
+        </tr>
+    </table>
+
+    <table class="table table-bordered align-middle mt-4" style="background: #fff;">
+        <thead>
+            <tr>
+                <th colspan="2" style="background: #e9f1fb;">Ta’lim ma’lumoti</th>
+            </tr>
+        </thead>
+        <tr>
+            <th>Mutaxassislik</th>
+            <td>{{ student.specialization|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Fakultet</th>
+            <td>{{ student.faculty|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Kurs</th>
+            <td>{{ student.course_year|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Guruh</th>
+            <td>{{ student.group|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>To‘lov shakli</th>
+            <td>{{ student.payment_type|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Ta’lim turi</th>
+            <td>{{ student.education_type|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Ta’lim shakli</th>
+            <td>{{ student.education_form|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>O‘quv yili</th>
+            <td>{{ student.study_year|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Semestr</th>
+            <td>{{ student.semester|default:"-" }}</td>
+        </tr>
+    </table>
+</div>
+{% endblock %}

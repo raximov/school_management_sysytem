@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<form action="{% url 'logout' %}" method="get" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger float-end">Logout</button>
+</form>
+<div class="container mt-5">
+    <h2 class="mb-4">O'qituvchi ma'lumotlari</h2>
+    <table class="table table-bordered align-middle" style="background: #fff;">
+        <tr>
+            <td rowspan="8" style="width:180px; text-align:center;">
+                {% if teacher.profile_photo %}
+                    <img src="{{ teacher.profile_photo.url }}" alt="Teacher Image" style="max-width:150px; max-height:180px; border-radius:8px;">
+                {% else %}
+                    <p>No image available</p>
+                {% endif %}
+            </td>
+            <th>Familiya</th>
+            <td>{{ teacher.last_name }}</td>
+        </tr>
+        <tr>
+            <th>Ismi</th>
+            <td>{{ teacher.name }}</td>
+        </tr>
+        <tr>
+            <th>Otasining ismi</th>
+            <td>{{ teacher.middle_name|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Email</th>
+            <td>{{ teacher.email }}</td>
+        </tr>
+        <tr>
+            <th>Telefon</th>
+            <td>{{ teacher.phone|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Mutaxassislik</th>
+            <td>{{ teacher.specialization|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Kafedra</th>
+            <td>{{ teacher.department|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Holati</th>
+            <td>{% if teacher.is_active %}Faol{% else %}Faol emas{% endif %}</td>
+        </tr>
+    </table>
+</div>
+{% endblock %}

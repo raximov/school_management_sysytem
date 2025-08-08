@@ -1,0 +1,50 @@
+{% comment %} <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ test.title }}</title>
+</head>
+<body>
+    <h1>{{ test.title }}</h1>
+    <form method="post" action="{% url 'submit_student_test' %}">
+        {% csrf_token %}
+        <input type="hidden" name="test_id" value="{{ test.id }}">
+        
+        {% for question in test.questions.all %}
+            <div style="margin-bottom: 20px;">
+                <p><strong>Q{{ forloop.counter }}: {{ question.text }}</strong></p>
+
+                {% if question.question_type == 'OC' %}
+                    {% for answer in question.answer_options.all %}
+                        <label>
+                            <input type="radio" name="question_{{ question.id }}" value="{{ answer.id }}">
+                            {{ answer.text }}
+                        </label><br>
+                    {% endfor %}
+                {% else %}
+                    <p>Unsupported question type: {{ question.question_type }}</p>
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html> {% endcomment %}
+{% if question.question_type == 'OC' %}
+    {% for answer in question.answer_options.all %}
+        <label>
+            <input type="radio" name="question_{{ question.id }}" value="{{ answer.id }}">
+            {{ answer.text }}
+        </label><br>
+    {% endfor %}
+{% elif question.question_type == 'MC' %}
+    {% for answer in question.answer_options.all %}
+        <label>
+            <input type="checkbox" name="question_{{ question.id }}[]" value="{{ answer.id }}">
+            {{ answer.text }}
+        </label><br>
+    {% endfor %}
+{% else %}
+    <p>Unsupported question type: {{ question.question_type }}</p>
+{% endif %}

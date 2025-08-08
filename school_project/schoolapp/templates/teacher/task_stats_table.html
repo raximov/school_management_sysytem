@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Stats: {{ task.title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        table {
+            width: 80%;
+            margin: auto;
+            border-collapse: collapse;
+            margin-top: 2em;
+        }
+        th, td {
+            border: 1px solid #999;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .yes { color: green; }
+        .no { color: red; }
+        .summary {
+            margin: 2em auto;
+            width: 80%;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center;">Task: {{ task.title }}</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Submitted</th>
+                <th>Grade</th>
+                <th>Submitted At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in submissions %}
+                <tr>
+                    <td>{{ s.student }}</td>
+                    <td>
+                        {% if s.is_done %}
+                            <span class="yes">Yes</span>
+                        {% else %}
+                            <span class="no">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ s.grade|default:"-" }}</td>
+                    <td>{{ s.submitted_at|date:"Y-m-d H:i" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="4">No submissions yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="summary">
+        <p><strong>Total Students Assigned:</strong> {{ total_students }}</p>
+        <p><strong>Students Submitted:</strong> {{ submitted_count }}</p>
+        <p><strong>Completion Rate:</strong> {{ completion_rate }}%</p>
+        <p><strong>Average Grade:</strong> {{ avg_grade|default:"-" }}</p>
+    </div>
+</body>
+</html>

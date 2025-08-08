@@ -1,0 +1,57 @@
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Course Stats</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1em;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px 12px;
+            text-align: center;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .student-name {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h2>Course Statistics Table</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Student</th>
+                {% for task_name in task_names %}
+                    <th>{{ task_name }}</th>
+                {% endfor %}
+                <th>Total Tasks</th>
+                <th>Submitted</th>
+                <th>Completion %</th>
+                <th>Avg Grade</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for student in students %}
+                <tr>
+                    <td class="student-name">{{ student.student }}</td>
+                    {% for task_name in task_names %}
+                        <td>{{ student.tasks|get_item:task_name|default:"-" }}</td>
+                    {% endfor %}
+                    <td>{{ student.total_tasks }}</td>
+                    <td>{{ student.submitted_tasks }}</td>
+                    <td>{{ student.completion_rate }}%</td>
+                    <td>{{ student.avg_grade }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
