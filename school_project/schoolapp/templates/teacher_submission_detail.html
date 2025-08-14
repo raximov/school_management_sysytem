@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Submission Detail</title>
+</head>
+<body>
+    <h1>{{ submission.task.title }} — {{ submission.student.user.username }}</h1>
+    <p>{{ submission.submitted_text }}</p>
+    {% if submission.submitted_file %}
+        <p>File: <a href="{{ submission.submitted_file.url }}">Download</a></p>
+    {% endif %}
+</body>
+</html>

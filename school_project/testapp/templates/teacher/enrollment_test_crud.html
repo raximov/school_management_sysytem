@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+
+{% block title %}Enrollment Tests{% endblock %}
+
+{% block content %}
+<h1>Enrollment Tests</h1>
+
+<!-- CREATE / EDIT Form -->
+<form id="enrollmentForm">
+    <input type="hidden" id="enrollmentTestId">
+
+    <label>Course:
+        <select id="courseSelect" required></select>
+    </label>
+
+    <label>Test:
+        <select id="testSelect" required></select>
+    </label>
+
+    <label>Start Date: <input type="datetime-local" id="startDate" required></label>
+    <label>End Date: <input type="datetime-local" id="endDate" required></label>
+    <label>Attempt Count: <input type="number" id="attemptCount" required></label>
+
+    <button type="submit">Save</button>
+    <button type="button" id="cancelEdit" style="display:none;">Cancel</button>
+</form>
+
+<hr>
+
+<!-- Table -->
+<table border="1" cellpadding="5" cellspacing="0" id="testsTable">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Course</th>
+            <th>Test</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Attempt Count</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+const apiUrl = '/testapp/teacher/enrollment-tests/';
+const csrfToken = '{{ csrf_token }}';
+let courses = [];
+let tests = [];
+
+// Load Courses and Tests for select dropdowns
+function loadCoursesAndTests() {
+    fetch('/school/course/')
+        .then(res => res.json())
+        .then(data => {
+            courses = data;
+            const courseSelect = document.getElementById('courseSelect');
+            courseSelect.innerHTML = '';
+            courses.forEach(c => {
+                const option = document.createElement('option');
+                option.value = c.id;
+                option.text = c.title;
+                courseSelect.appendChild(option);
+            });
+        });
+
+    fetch('/testapp/teacher/tests/')
+        .then(res => res.json())
+        .then(data => {
+            tests = data;
+            const testSelect = document.getElementById('testSelect');
+            testSelect.innerHTML = '';
+            tests.forEach(t => {
+                const option = document.createElement('option');
+                option.value = t.id;
+                option.text = t.title;
+                testSelect.appendChild(option);
+            });
+        });
+}
+
+// Fetch and render table
+function fetchTests() {
+    fetch(apiUrl)
+        .then(res => res.json())
+        .then(data => {
+            const tbody = document.querySelector('#testsTable tbody');
+            tbody.innerHTML = '';
+            data.forEach(et => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${et.id}</td>
+                    <td>${et.course.title}</td>
+                    <td>${et.test.title}</td>
+                    <td>${new Date(et.start_date).toLocaleString()}</td>
+                    <td>${new Date(et.end_date).toLocaleString()}</td>
+                    <td>${et.attempt_count}</td>
+                    <td>
+                        <button onclick="editEnrollmentTest(${et.id})">Edit</button>
+                        <button onclick="deleteEnrollmentTest(${et.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+        });
+}
+
+// Create / Update
+document.getElementById('enrollmentForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const id = document.getElementById('enrollmentTestId').value;
+    const payload = {
+    course_id: parseInt(document.getElementById('courseSelect').value),
+    test_id: parseInt(document.getElementById('testSelect').value),
+    start_date: document.getElementById('startDate').value,
+    end_date: document.getElementById('endDate').value,
+    attempt_count: parseInt(document.getElementById('attemptCount').value)
+    };
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `${apiUrl}${id}/` : apiUrl;
+
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(() => {
+        fetchTests();
+        resetForm();
+    });
+});
+
+// Edit
+function editTest(id) {
+    fetch(`${apiUrl}${id}/`)
+        .then(res => res.json())
+        .then(test => {
+            document.getElementById('enrollmentTestId').value = test.id;
+            document.getElementById('courseSelect').value = test.course;
+            document.getElementById('testSelect').value = test.test;
+            document.getElementById('startDate').value = test.start_date.slice(0,16);
+            document.getElementById('endDate').value = test.end_date.slice(0,16);
+            document.getElementById('attemptCount').value = test.attempt_count;
+            document.getElementById('cancelEdit').style.display = 'inline';
+        });
+}
+
+// Cancel Edit
+document.getElementById('cancelEdit').addEventListener('click', resetForm);
+
+function resetForm() {
+    document.getElementById('enrollmentForm').reset();
+    document.getElementById('enrollmentTestId').value = '';
+    document.getElementById('cancelEdit').style.display = 'none';
+}
+
+// Delete
+function deleteTest(id) {
+    if(confirm('Are you sure?')) {
+        fetch(`${apiUrl}${id}/`, {
+            method: 'DELETE',
+            headers: {'X-CSRFToken': csrfToken}
+        }).then(() => fetchTests());
+    }
+}
+
+// Initial load
+loadCoursesAndTests();
+fetchTests();
+</script>
+{% endblock %}

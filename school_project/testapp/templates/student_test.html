@@ -1,50 +1,58 @@
-{% comment %} <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ test.title }}</title>
-</head>
-<body>
-    <h1>{{ test.title }}</h1>
-    <form method="post" action="{% url 'submit_student_test' %}">
-        {% csrf_token %}
-        <input type="hidden" name="test_id" value="{{ test.id }}">
-        
-        {% for question in test.questions.all %}
-            <div style="margin-bottom: 20px;">
-                <p><strong>Q{{ forloop.counter }}: {{ question.text }}</strong></p>
+{% load custom_filters %}
+{% block content %}
+<h1>All Tests</h1>
 
-                {% if question.question_type == 'OC' %}
-                    {% for answer in question.answer_options.all %}
-                        <label>
-                            <input type="radio" name="question_{{ question.id }}" value="{{ answer.id }}">
-                            {{ answer.text }}
-                        </label><br>
-                    {% endfor %}
-                {% else %}
-                    <p>Unsupported question type: {{ question.question_type }}</p>
-                {% endif %}
-            </div>
-        {% endfor %}
+{% for et in enrollment_tests %}
+    <div style="border:1px solid #ccc; padding:12px; margin-bottom:12px;">
+        <h3>{{ et.test.title }}</h3>
 
-        <button type="submit">Submit</button>
-    </form>
-</body>
-</html> {% endcomment %}
-{% if question.question_type == 'OC' %}
-    {% for answer in question.answer_options.all %}
-        <label>
-            <input type="radio" name="question_{{ question.id }}" value="{{ answer.id }}">
-            {{ answer.text }}
-        </label><br>
-    {% endfor %}
-{% elif question.question_type == 'MC' %}
-    {% for answer in question.answer_options.all %}
-        <label>
-            <input type="checkbox" name="question_{{ question.id }}[]" value="{{ answer.id }}">
-            {{ answer.text }}
-        </label><br>
-    {% endfor %}
-{% else %}
-    <p>Unsupported question type: {{ question.question_type }}</p>
-{% endif %}
+        <p><strong>From (Teacher):</strong> {{ et.teacher.user.get_full_name|default:et.teacher }}</p>
+        <p><strong>Course:</strong> {{ et.course.title|default:et.course }}</p>
+
+        <p>
+            <strong>Start:</strong>
+            {% if et.start_date %}{{ et.start_date|date:"M d, Y H:i" }}{% else %}—{% endif %}
+            &nbsp; |
+            <strong>End:</strong>
+            {% if et.end_date %}{{ et.end_date|date:"M d, Y H:i" }}{% else %}—{% endif %}
+        </p>
+
+        <p>
+            <strong>Allowed attempts:</strong> {{ et.attempt_count }}
+            &nbsp; | &nbsp;
+            <strong>Used:</strong> {{ attempts_count_map|get_item:et.test.id|default:"0" }}
+            &nbsp; | &nbsp;
+            <strong>Remaining:</strong> {{ remaining_map|get_item:et.test.id|default:"0" }}
+        </p>
+
+        <p><strong>Total questions (this test):</strong> {{ et.test.questions.count }}</p>
+
+        {# Latest attempt info (if bor) #}
+        {% with attempts_by_test|get_item:et.test.id as last_attempt %}
+            {% if last_attempt %}
+                <p><strong>Status:</strong> Attempt started</p>
+                <p><strong>Attempt ID:</strong> {{ last_attempt.id }}</p>
+                <p><strong>Started At:</strong> {{ last_attempt.started_at|date:"M d, Y H:i" }}</p>
+            {% else %}
+                <p><strong>Status:</strong> Not attempted yet</p>
+            {% endif %}
+        {% endwith %}
+
+        {# Availability checks #}
+        {% with remaining_map|get_item:et.test.id as remaining %}
+            {% if et.start_date and et.start_date > now %}
+                <p><em>Not started yet (opens {{ et.start_date|date:"M d, Y H:i" }})</em></p>
+            {% elif et.end_date and et.end_date < now %}
+                <p><em>Expired (ended {{ et.end_date|date:"M d, Y H:i" }})</em></p>
+            {% elif remaining|default:0 <= 0 %}
+                <p><em>No attempts left</em></p>
+            {% else %}
+                <p><a class="btn btn-primary btn-sm" href="{% url 'testapp:student_test_detail' et.test.id %}">Take/View Test</a></p>
+            {% endif %}
+        {% endwith %}
+
+    </div>
+{% empty %}
+    <p>No tests available.</p>
+{% endfor %}
+{% endblock %}

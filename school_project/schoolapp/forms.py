@@ -1,14 +1,26 @@
 from django import forms
 from .models import Student
+from datetime import date
+from django.core.exceptions import ValidationError
+
 
 class StudentRegisterForm(forms.ModelForm):
     username = forms.CharField(max_length=150)
     password = forms.CharField(widget=forms.PasswordInput)
+    date_of_birth = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}), required=False)
 
     class Meta:
         model = Student
         exclude = ['user']  # user will be set in the view
 
+    def clean_date_of_birth(self):
+        dob = self.cleaned_data.get('date_of_birth')
+        if dob:
+            today = date.today()
+            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            if age < 7:
+                raise ValidationError("Talaba kamida 7 yoshda bo‘lishi kerak.")
+        return dob
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

@@ -1,30 +1,71 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}School Project{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <title>{% block title %}My Project{% endblock %}</title>
     <style>
-        body { background: #f8f9fa; }
-        .login-container, .register-container {
-            max-width: 400px;
-            margin: 40px auto;
-            padding: 30px;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        body {
+            display: flex;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        nav {
+            width: 220px;
+            background-color: #f8f9fa;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            position: fixed; /* Chap panel har doim ko‘rinadi */
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+        }
+        main {
+            margin-left: 240px; /* Chap panel o‘lchami + biroz bo‘sh joy */
+            padding: 20px;
+            flex-grow: 1;
+        }
+        nav a {
+            display: block;
+            padding: 8px 0;
+            color: #333;
+            text-decoration: none;
+        }
+        nav a:hover {
+            background-color: #ddd;
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
-        <div class="container">
-            <a class="navbar-brand" href="/">School Project</a>
-        </div>
+    <nav>
+        <h3>Menu</h3>
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <a href="{% url 'student_tasks' %}">Student Tasks</a>
+        <a href="{% url 'teacher_tasks' %}">Teacher Tasks</a>
+        <a href="{% url 'teacher_submit_task_list' %}">Teacher Submissions</a>
+        <a href="{% url 'enrollment-list' %}">Enrollments</a>
+        <a href="{% url 'testapp:enrollment_test_crud' %}">enrollment_test_crud</a>
+        <a href="{% url 'testapp:teacher-panel' %}">teacher-panel</a>
+       
+
+
+        
+
+        <a href="{% url 'testapp:student_tests' %}">student_tests</a>
+        <a href="{% url 'testapp:test_results' test_id=6 %}">test_results</a>
+        
+        <a href="{% url 'login' %}">login</a>
+        <a href="#" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">Logout</a>
+
+<form id="logout-form" method="post" action="{% url 'logout' %}" style="display:none;">
+    {% csrf_token %}
+</form>
+
     </nav>
-    <div class="container">
-        {% block content %}{% endblock %}
-    </div>
+
+    <main>
+        {% block content %}
+        <!-- Har bir sahifaning o'ziga xos kontenti shu yerda chiqadi -->
+        {% endblock %}
+    </main>
 </body>
 </html>

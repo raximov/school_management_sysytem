@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Savollar CRUD</title>
+</head>
+<body>
+    <h1>Savollar</h1>
+
+    <button onclick="goBack()">⬅ Testlarga qaytish</button>
+
+    <form id="questionForm">
+        <input type="hidden" id="questionId" />
+        <input type="text" id="questionText" placeholder="Savol matni" required />
+        <button type="submit">Saqlash</button>
+        <button type="button" id="resetQuestionForm">Tozalash</button>
+    </form>
+
+    <ul id="questionList"></ul>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const testId = urlParams.get('test');
+        if(!testId) alert('Test ID topilmadi!');
+
+        const API = `/test/teacher/questions/?test=${testId}`;
+
+        async function fetchQuestions() {
+            const res = await fetch(API);
+            const questions = await res.json();
+            const ul = document.getElementById('questionList');
+            ul.innerHTML = '';
+            questions.forEach(q => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    ${q.text}
+                    <button onclick="editQuestion(${q.id}, '${q.text}')">✏️</button>
+                    <button onclick="deleteQuestion(${q.id})">🗑️</button>
+                    <button onclick="goToAnswers(${q.id})">Javoblar</button>
+                `;
+                ul.appendChild(li);
+            });
+        }
+
+        document.getElementById('questionForm').onsubmit = async e => {
+            e.preventDefault();
+            const id = document.getElementById('questionId').value;
+            const text = document.getElementById('questionText').value;
+
+            const payload = {text, test: testId};
+
+            if(id) {
+                await fetch(`/test/teacher/questions/${id}/`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                await fetch('/test/teacher/questions/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            resetForm();
+            fetchQuestions();
+        };
+
+        function editQuestion(id, text) {
+            document.getElementById('questionId').value = id;
+            document.getElementById('questionText').value = text;
+        }
+        function resetForm() {
+            document.getElementById('questionId').value = '';
+            document.getElementById('questionText').value = '';
+        }
+        document.getElementById('resetQuestionForm').onclick = resetForm;
+
+        async function deleteQuestion(id) {
+            if(confirm('Savol o\'chirilsinmi?')) {
+                await fetch(`/test/teacher/questions/${id}/`, {method: 'DELETE'});
+                fetchQuestions();
+            }
+        }
+
+        function goToAnswers(questionId) {
+            window.location.href = `teacher_answers.html?question=${questionId}`;
+        }
+
+        function goBack() {
+            window.location.href = 'teacher_tests.html';
+        }
+
+        fetchQuestions();
+    </script>
+</body>
+</html>

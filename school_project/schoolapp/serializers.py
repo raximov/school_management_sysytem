@@ -29,12 +29,16 @@ class CourseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class EnrollmentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)  # yoki student.name
+    course_title = serializers.CharField(source='course.title', read_only=True)
+
     class Meta:
         model = Enrollment
-        fields = '__all__'
-        depth = 1  # Shows related student, course, etc.
+        fields = ['id', 'student', 'student_name', 'course', 'course_title']
 
 class TaskSerializer(serializers.ModelSerializer):
+    student = StudentSerializer()
+    course = CourseSerializer()
     class Meta:
         model = Task
         fields = '__all__'
@@ -44,7 +48,7 @@ class StudentSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaskSubmission
         fields = '__all__'
-        read_only_fields = ('student', 'teacher', 'created_at', 'updated_at', 'task', 'grade', 'feedback', 'is_done')
+        read_only_fields = ('student', 'teacher', 'created_at', 'updated_at', 'task', 'score', 'feedback', 'is_done')
 
 class TeacherSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -57,10 +61,10 @@ class StudentTaskStatsSerializer(serializers.ModelSerializer):
     total_tasks = serializers.IntegerField()
     submitted_tasks = serializers.IntegerField()
     completion_rate = serializers.FloatField()
-    avg_grade = serializers.FloatField()
+    avg_score = serializers.FloatField()
 
 
     class Meta:
         model = Student
-        fields = ['id',  'total_tasks', 'submitted_tasks', 'completion_rate', 'avg_grade']
+        fields = ['id',  'total_tasks', 'submitted_tasks', 'completion_rate', 'avg_score']
 

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Submissions</title>
+</head>
+<body>
+    <h1>My Submissions</h1>
+    <ul>
+        {% for sub in submissions %}
+            <li>
+                {{ sub.task.title }} - {{ sub.submitted_text|default:"No text" }}
+            </li>
+        {% empty %}
+            <li>No submissions yet.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

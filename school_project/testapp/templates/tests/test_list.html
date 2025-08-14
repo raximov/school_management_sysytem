@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📋 Testlar ro'yxati</h2>
+<a href="{% url 'test-create' %}">➕ Yangi test qo'shish</a>
+<table border="1">
+    <tr>
+        <th>#</th>
+        <th>Nomi</th>
+        <th>Amallar</th>
+    </tr>
+    {% for test in tests %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ test.title }}</td>
+        <td>
+            <a href="{% url 'test-edit' test.id %}">✏️ Tahrirlash</a> |
+            <a href="{% url 'test-delete' test.id %}" onclick="return confirm('O‘chirishni tasdiqlaysizmi?')">🗑️ O‘chirish</a>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

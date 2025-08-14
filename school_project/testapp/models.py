@@ -1,10 +1,9 @@
-# testapp/models.py
 from django.db import models
-from schoolapp.models import Teacher, Student,Course
+from schoolapp.models import Teacher, Student, Enrollment, Course
 
 class Test(models.Model):
     title = models.CharField(max_length=255)
-    teacherid = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='tests')
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='tests')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -26,56 +25,77 @@ class Question(models.Model):
         (WRITTEN, 'Written answer'),
     ]
 
-    testid = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='questions')
+    test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='questions')
     text = models.TextField()
     question_type = models.CharField(max_length=3, choices=QUESTION_TYPES)
+    mark = models.FloatField(default=1.1)
 
-    # def __str__(self):
-    #     return f"{self.text} ({self.question_type()})"
+    def __str__(self):
+        return self.text
 
 
 class Answer(models.Model):
-    questionid = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answer_options')
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answer_options')
     text = models.TextField()
-    is_correct = models.BooleanField(default=False)  # Only for MC and OC
+    is_correct = models.BooleanField(default=False)
 
     # For ORDERING or MATCHING questions
-    order = models.PositiveIntegerField(null=True, blank=True)     # For ORDERING
-    match_text = models.TextField(blank=True, null=True)           # For MATCHING
-    mark = models.FloatField(default=1.1)  # Points for this answer
+    order = models.PositiveIntegerField(null=True, blank=True)
+    match_text = models.TextField(blank=True, null=True)
+    
+
     def __str__(self):
         return self.text
 
 
 class TestAttempt(models.Model):
-    studentid = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='test_attempts')
-    testid = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='attempts')
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='test_attempts')
+    test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='attempts')
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
-    # def __str__(self):
-    #     return f"{self.student.user.username} - {self.test.title}"
+    def __str__(self):
+        return f"{self.student.user.username} - {self.test.title}"
+
+class TestAttempt(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    test = models.ForeignKey(Test, on_delete=models.CASCADE)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    score = models.FloatField(default=0)
+    percentage = models.FloatField(default=0)
+
+    def __str__(self):
+        return f"{self.student} - {self.test}"
+
+
+class AnswerSelection(models.Model):
+    attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE, related_name='selections')
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    selected_answer = models.ForeignKey(Answer, on_delete=models.CASCADE, null=True, blank=True)
+
+    def is_correct(self):
+        return self.selected_answer and self.selected_answer.is_correct
 
 
 class StudentAnswer(models.Model):
     attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE, related_name='answers')
-    questionid = models.ForeignKey(Question, on_delete=models.CASCADE)
-    selected_answers = models.ManyToManyField(Answer, blank=True)  # For MC/OC
-    written_answer = models.TextField(blank=True, null=True)       # For WR
-    scored_mark = models.FloatField(default=0.0)  # Points scored for this answer
-
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    selected_answers = models.ManyToManyField(Answer, blank=True)
+    written_answer = models.TextField(blank=True, null=True)
+    scored_mark = models.FloatField(default=0.0)
 
     def __str__(self):
-        return f"Answer to {self.questionid.id} by {self.attempt.studentid.user.username}"
+        return f"Answer to Q{self.question.id} by {self.attempt.student.user.username}"
 
-class CourseTest(models.Model):
-    testid = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='course_tests')
-    courseid = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='course_tests')
+
+class EnrollmentTest(models.Model):
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='enrollment_tests')
+    test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='enrollment_tests')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollment_tests')
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
-    attemt_count = models.PositiveIntegerField(default=3)  # Number of attempts allowed
-    test_attempt_id = models.ForeignKey(TestAttempt, on_delete=models.CASCADE, null=True, blank=True, related_name='course_tests')
-
+    attempt_count = models.PositiveIntegerField(default=3)
 
     def __str__(self):
-        return f"{self.courseid} - {self.test.title}"
+        return f"{self.course} - {self.test.title}"

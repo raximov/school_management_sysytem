@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>🗑️ "{{ test.title }}" testini o‘chirishni tasdiqlaysizmi?</h2>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit">✅ Ha, o‘chir</button>
+    <a href="{% url 'test-list' %}">❌ Bekor qilish</a>
+</form>
+{% endblock %}

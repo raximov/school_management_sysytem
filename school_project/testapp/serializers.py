@@ -1,64 +1,46 @@
 from rest_framework import serializers
-from .models import Test, Question, Answer, StudentAnswer, TestAttempt
-
-
-class AnswerOptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Answer
-        fields = "__all__"
-
-class QuestionSerializer(serializers.ModelSerializer):
-    answer_options = AnswerOptionSerializer(many=True)
-
-    class Meta:
-        model = Question
-        fields = "__all__"#['id', 'text', 'question_type', 'answers']
-
-    def get_answers(self, obj):
-        return AnswerOptionSerializer(obj.answers.all(), many=True).data
-    
-
+from .models import Test, Question, Answer, StudentAnswer, TestAttempt, EnrollmentTest
+from schoolapp.serializers import CourseSerializer, TeacherSerializer
+from schoolapp.models import Course
 
 class TestSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True)
-
     class Meta:
         model = Test
-        fields = "__all__"
+        fields = ['id', 'title', 'teacher']
+        read_only_fields = ['teacher']
 
-    def create(self, validated_data):
-        questions_data = validated_data.pop('questions')
-        test = Test.objects.create(**validated_data)
+class QuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Question
+        fields = ['id', 'text', 'question_type', 'mark', 'test']
 
-        for q_data in questions_data:
-            answers_data = q_data.pop('answer_options')
-            question = Question.objects.create(testid=test, **q_data)
+class AnswerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Answer
+        fields = ['id', 'text', 'is_correct', 'question']
 
-            for a_data in answers_data:
-                Answer.objects.create(questionid=question, **a_data)
 
-        return test
-    def update(self, instance, validated_data):
-        questions_data = validated_data.pop('questions', None)
+class EnrollmentTestSerializer(serializers.ModelSerializer):
+    # GET uchun nested
+    course = CourseSerializer(read_only=True)
+    test = TestSerializer(read_only=True)
 
-        instance.title = validated_data.get('title', instance.title)
-        instance.teacherid = validated_data.get('teacherid', instance.teacherid)
-        instance.save()
+    # POST/PUT uchun id
+    course_id = serializers.PrimaryKeyRelatedField(
+        queryset=Course.objects.all(), write_only=True, source='course'
+    )
+    test_id = serializers.PrimaryKeyRelatedField(
+        queryset=Test.objects.all(), write_only=True, source='test'
+    )
+    teacher = serializers.HiddenField(default=serializers.CurrentUserDefault())
 
-        if questions_data is not None:
-            instance.questions.all().delete()
-
-            for question_data in questions_data:
-                answer_options_data = question_data.pop('answer_options', [])
-                question_data.pop('testid', None)  # ✅ MUHIM
-                question = Question.objects.create(testid=instance, **question_data)
-
-                for answer_data in answer_options_data:
-                    answer_data.pop('questionid', None)  # ✅ Shuningdek, kerak bo‘lsa bu ham
-                    Answer.objects.create(questionid=question, **answer_data)
-
-        return instance
-
+    class Meta:
+        model = EnrollmentTest
+        fields = [
+            'id', 'course', 'test',
+            'course_id', 'test_id',
+            'start_date', 'end_date', 'attempt_count', 'teacher'
+        ]
 
 class StudentAnswerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -66,11 +48,13 @@ class StudentAnswerSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TestAttemptSerializer(serializers.ModelSerializer):
+    test = TestSerializer(source='test', read_only=True)
     answers = StudentAnswerSerializer(many=True, read_only=True)
 
     class Meta:
         model = TestAttempt
-        fields = "__all__" # ['id', 'studentid', 'testid', 'started_at', 'answers']
+        fields = ['id', 'answers', 'started_at', 'completed_at', 'studentid', 'test', 'test']
+
 
 class TestAttemptResultSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.user.get_full_name", read_only=True)
@@ -78,4 +62,4 @@ class TestAttemptResultSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TestAttempt
-        fields = "__all__" #['id', 'student_name', 'score', 'submitted_at', 'answers']
+        fields = ['id', 'student_name', 'score', 'submitted_at', 'answers']

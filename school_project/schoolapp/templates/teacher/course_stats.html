@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Course Detailed Statistics</title>
+    <title>Course Statistics</title>
 </head>
 <body>
-    <h1>Course Detailed Statistics</h1>
+    <h1>Overall Course Statistics</h1>
     <table border="1">
         <thead>
             <tr>
@@ -12,8 +12,7 @@
                 <th>Total Tasks</th>
                 <th>Submitted Tasks</th>
                 <th>Completion Rate (%)</th>
-                <th>Average Grade</th>
-                {% for task in task_names %}
+                {% for task in tasks %}
                     <th>{{ task }}</th>
                 {% endfor %}
             </tr>
@@ -25,13 +24,12 @@
                     <td>{{ student.total_tasks }}</td>
                     <td>{{ student.submitted_tasks }}</td>
                     <td>{{ student.completion_rate }}</td>
-                    <td>{{ student.avg_grade }}</td>
                     {% for task_name, grade in student.tasks.items %}
                         <td>{{ grade }}</td>
                     {% endfor %}
                 </tr>
             {% empty %}
-                <tr><td colspan="5">No data</td></tr>
+                <tr><td colspan="4">No data</td></tr>
             {% endfor %}
         </tbody>
     </table>

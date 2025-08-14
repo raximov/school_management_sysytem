@@ -10,7 +10,8 @@ from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render, redirect
 from django.contrib.auth import login
 from django.contrib.auth.models import User
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.views import LoginView, LogoutView
+
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
 from rest_framework.views import APIView
@@ -25,6 +26,13 @@ from django.db.models import Count, Q, F, FloatField, ExpressionWrapper,Avg
 from collections import defaultdict
 from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce
+from django.urls import reverse_lazy
+from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
+from django.http import JsonResponse
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
+import json
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -52,9 +60,64 @@ class CourseViewSet(viewsets.ModelViewSet):
     serializer_class = CourseSerializer
 
 
+from django.shortcuts import redirect
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework import viewsets
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+@method_decorator(csrf_exempt, name='dispatch')  # testing / HTML forms uchun
 class EnrollmentViewSet(viewsets.ModelViewSet):
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
+    permission_classes = [IsAuthenticated]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'enrollment_list.html'
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        if request.accepted_renderer.format == 'html':
+            return Response({'enrollments': queryset}, template_name=self.template_name)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def dispatch(self, request, *args, **kwargs):
+        """HTML formdan kelgan _method ni HTTP methodga aylantirish"""
+        if "_method" in request.POST:
+            method = request.POST["_method"].lower()
+            if method == "delete":
+                request.method = "DELETE"
+            elif method == "put":
+                request.method = "PUT"
+        return super().dispatch(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        resp = super().create(request, *args, **kwargs)
+        if request.accepted_renderer.format == 'html':
+            return redirect('enrollment-list')
+        return resp
+
+    def update(self, request, *args, **kwargs):
+        resp = super().update(request, *args, **kwargs)
+        if request.accepted_renderer.format == 'html':
+            return redirect('enrollment-list')
+        return resp
+
+    def destroy(self, request, *args, **kwargs):
+        resp = super().destroy(request, *args, **kwargs)
+        if request.accepted_renderer.format == 'html':
+            return redirect('enrollment-list')
+        return resp
+
+
 
 def register_student(request):
     if request.method == 'POST':
@@ -104,10 +167,14 @@ class CustomLoginView(LoginView):
     def get_success_url(self):
         user = self.request.user
         if hasattr(user, 'student'):
-            return '/dashboard/student/'
+            return reverse_lazy('dashboard')
         elif hasattr(user, 'teacher'):
-            return '/dashboard/teacher/'
-        return '/'
+            return reverse_lazy('dashboard')
+        return reverse_lazy('dashboard')
+
+class CustomLogoutView(LogoutView):
+    def get(self, request, *args, **kwargs):
+        return self.post(request, *args, **kwargs)
 
 @login_required
 def post_login_redirect(request):
@@ -168,23 +235,35 @@ class TaskViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 class StudentTasksListView(APIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'student_tasks.html'
+
+
     permission_classes = [IsAuthenticated, IsStudent]
     serializer_class = TaskSerializer
 
     def get(self, request, *args, **kwargs):
         student = request.user.student_profile
 
-        # Studentning barcha kurslari (Enrollment orqali)
+        # Studentning barcha kurslari
         course_ids = student.enrollments.values_list('course_id', flat=True)
 
-        # Faqat shu kurslarga tegishli topshiriqlarni olish      
+        # Faqat shu kurslarga tegishli topshiriqlar
         course_tasks = Task.objects.filter(course_id__in=course_ids)
 
         serializer = self.serializer_class(course_tasks, many=True)
+
+        # Agar foydalanuvchi HTML so‘rasa (Accept: text/html)
+        if request.accepted_renderer.format == 'html':
+            return Response({'tasks': serializer.data}, template_name=self.template_name)
+
+        # Aks holda JSON qaytadi
         return Response(serializer.data)
 
 
 class StudentTasksView(APIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'student_task_detail.html'
     permission_classes = [IsAuthenticated, IsStudent]
     serializer_class = TaskSerializer
 
@@ -193,16 +272,23 @@ class StudentTasksView(APIView):
         course_ids = student.enrollments.values_list('course_id', flat=True)
         course_tasks = Task.objects.filter(course_id__in=course_ids)
 
-
-        if pk:  # if a specific task ID is provided
+        if pk:
             task = course_tasks.filter(id=pk).first()
             if not task:
+                if request.accepted_renderer.format == 'html':
+                    return Response({'error': "Task not found"}, template_name='error.html', status=404)
                 return Response({"detail": "Task not found or not assigned to this student."}, status=404)
-            serializer = TaskSerializer(task)
-        else:  # return all tasks assigned to the student
-            serializer = TaskSerializer(course_tasks, many=True)
+            serializer = self.serializer_class(task)
+            if request.accepted_renderer.format == 'html':
+                return Response({'task': serializer.data}, template_name=self.template_name)
+            return Response(serializer.data)
+        else:
+            serializer = self.serializer_class(course_tasks, many=True)
+            if request.accepted_renderer.format == 'html':
+                return Response({'tasks': serializer.data}, template_name='student_tasks.html')
+            return Response(serializer.data)
 
-        return Response(serializer.data)
+
 
 
 class CourseTasksView(APIView):
@@ -214,33 +300,26 @@ class CourseTasksView(APIView):
         serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
     
-class TeacherTaskViewSet(viewsets.ModelViewSet):
-    serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated, IsTeacher]
 
-    def get_queryset(self):
-        queryset = Task.objects.filter(teacher__user=self.request.user)
-        pk = self.kwargs.get('pk')
-        if pk:
-            # Filter by pk if provided in URL
-            return queryset.filter(pk=pk)
-        return queryset
 
 class SubmitTaskView(APIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'submit_task.html'
     permission_classes = [IsAuthenticated, IsStudent]
     serializer_class = StudentSubmissionSerializer
 
     def get(self, request, pk=None, *args, **kwargs):
         student = request.user.student_profile
-
         if pk is not None:
             submissions = TaskSubmission.objects.filter(task_id=pk, student=student)
         else:
             submissions = TaskSubmission.objects.filter(student=student)
 
-        serializer = StudentSubmissionSerializer(submissions, many=True)
-        return Response(serializer.data)
+        serializer = self.serializer_class(submissions, many=True)
 
+        if request.accepted_renderer.format == 'html':
+            return Response({'submissions': serializer.data}, template_name=self.template_name)
+        return Response(serializer.data)
 
     def post(self, request, pk):
         if not hasattr(request.user, 'student_profile'):
@@ -249,7 +328,6 @@ class SubmitTaskView(APIView):
         student = request.user.student_profile
         task = get_object_or_404(Task, id=pk)
 
-        # Faqat o‘ziga (yoki guruhiga) tegishli topshiriqlarni topshirish mumkin
         if not student.enrollments.filter(course=task.course).exists():
             return Response({"error": "You are not allowed to submit this task."}, status=403)
 
@@ -265,52 +343,108 @@ class SubmitTaskView(APIView):
         submission.is_done = True
         submission.save()
 
+        if request.accepted_renderer.format == 'html':
+            return Response({'message': "Task submitted successfully."}, template_name='submit_success.html')
+
         return Response({"message": "Task submitted successfully."})
 
+class TeacherTaskViewSet(viewsets.ModelViewSet):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'teacher_tasks.html'
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated, IsTeacher]
 
+    def get_queryset(self):
+        queryset = Task.objects.filter(teacher__user=self.request.user)
+        pk = self.kwargs.get('pk')
+        if pk:
+            return queryset.filter(pk=pk)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+
+        if request.accepted_renderer.format == 'html':
+            return Response({'tasks': serializer.data}, template_name=self.template_name)
+        return Response(serializer.data)
+
+
+# Teacher Submissions List + Create
 class TeacherSubmitListCreateView(ListCreateAPIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'teacher_submissions.html'
     serializer_class = TeacherSubmissionSerializer
     permission_classes = [IsAuthenticated, IsTeacher]
-    queryset = TaskSubmission.objects.all()
-    
+
+    def get_queryset(self):
+        return TaskSubmission.objects.filter(task__teacher__user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+
+        if request.accepted_renderer.format == 'html':
+            return Response({'submissions': serializer.data}, template_name=self.template_name)
+        return Response(serializer.data)
+
+
+# Teacher Submission Detail / Update / Delete
 class TeacherSubmitRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'teacher_submission_detail.html'
     serializer_class = TeacherSubmissionSerializer
     permission_classes = [IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
-        id = self.kwargs['pk']
-        request =self.request
-        
-        if id:
-            return TaskSubmission.objects.filter(id=id)
-        return TaskSubmission.objects.all()
-
-class TeacherSubmitView(viewsets.ModelViewSet):
-    serializer_class = TeacherSubmissionSerializer
-    permission_classes = [IsAuthenticated, IsTeacher]
-
-    def get_queryset(self):
-        id = self.kwargs['pk']
-        request = self.request
-        if id:
-            return TaskSubmission.objects.filter(id=id)
-        return TaskSubmission.objects.all()
+        return TaskSubmission.objects.filter(task__teacher__user=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
-        submission = self.get_object()
-        serializer = self.get_serializer(submission)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+
+        if request.accepted_renderer.format == 'html':
+            return Response({'submission': serializer.data}, template_name=self.template_name)
         return Response(serializer.data)
 
-    def update(self, request, *args, **kwargs):
-        submission = self.get_object()
-        serializer = self.get_serializer(submission, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
 
+
+
+# class TeacherSubmitView(viewsets.ModelViewSet):
+#     serializer_class = TeacherSubmissionSerializer
+#     permission_classes = [IsAuthenticated, IsTeacher]
+
+#     def get_queryset(self):
+#         id = self.kwargs['pk']
+#         request = self.request
+#         if id:
+#             return TaskSubmission.objects.filter(id=id)
+#         return TaskSubmission.objects.all()
+
+#     def retrieve(self, request, *args, **kwargs):
+#         submission = self.get_object()
+#         serializer = self.get_serializer(submission)
+#         return Response(serializer.data)
+
+#     def update(self, request, *args, **kwargs):
+#         submission = self.get_object()
+#         serializer = self.get_serializer(submission, data=request.data, partial=True)
+#         serializer.is_valid(raise_exception=True)
+#         serializer.save()
+#         return Response(serializer.data)
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from django.shortcuts import get_object_or_404
+from django.db.models import Avg
+from rest_framework.permissions import IsAuthenticated
 
 class TaskStatsTableView(APIView):
     permission_classes = [IsAuthenticated, IsTeacher]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'teacher/task_stats_table.html'
 
     def get(self, request, pk):
         teacher = request.user.teacher_profile
@@ -323,9 +457,9 @@ class TaskStatsTableView(APIView):
         for submission in submissions:
             student_name = submission.student.user.get_full_name() if submission.student and submission.student.user else str(submission.student)
             student_data.append({
-                'student': submission.student.user.username if submission.student and submission.student.user else str(submission.student),
+                'student': student_name,
                 'is_done': submission.is_done,
-                'grade': submission.grade,
+                'score': submission.score,
                 'submitted_at': submission.submitted_at,
             })
 
@@ -334,120 +468,149 @@ class TaskStatsTableView(APIView):
 
         total_students = submissions.count()
         completion_rate = (submitted_count / total_students * 100) if total_students > 0 else 0
-        avg_grade = submissions.aggregate(Avg('grade'))['grade__avg']
+        avg_score = submissions.aggregate(Avg('score'))['score__avg']
 
-        return render(request, 'teacher/task_stats_table.html', {
+        context = {
             'task': task,
             'submissions': student_data,
             'total_students': total_students,
             'submitted_count': submitted_count,
             'completion_rate': round(completion_rate, 2),
-            'avg_grade': round(avg_grade, 2) if avg_grade else None
-        })
+            'avg_score': round(avg_score, 2) if avg_score else None
+        }
+
+        if request.accepted_renderer.format == 'html':
+            return Response(context, template_name=self.template_name)
+        return Response(context)
 
 
 
+
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from django.db.models import Avg
 
 class CourseStatsView(APIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'teacher/course_stats.html'
     permission_classes = [IsAuthenticated, IsTeacher]
 
     def get(self, request):
         teacher = request.user.teacher_profile
 
-        # O'qituvchining barcha tasklarini olish
+        # O'qituvchining barcha tasklari
         tasks = Task.objects.filter(teacher=teacher)
         task_list = list(tasks.values('id', 'title'))
 
-        # Barcha talabalarni olish
+        # Barcha talabalar
         students = Student.objects.all()
 
         result = []
         for student in students:
-            # Talaba uchun topshiriqlarni baholari bilan olish
-            task_grades = {}
+            task_scores = {}
             for task in tasks:
                 submission = TaskSubmission.objects.filter(task=task, student=student).first()
-                task_grades[task.title] = submission.grade if submission and submission.grade is not None else 0
+                task_scores[task.title] = submission.score if submission and submission.score is not None else 0
 
-            # Umumiy statistikalar
-            total_tasks = Task.objects.filter(teacher=teacher, course__in=student.enrollments.values_list('course', flat=True)).count()
-            submitted_tasks = TaskSubmission.objects.filter(student=student, task__teacher=teacher, is_done=True).count()
+            total_tasks = Task.objects.filter(
+                teacher=teacher,
+                course__in=student.enrollments.values_list('course', flat=True)
+            ).count()
+
+            submitted_tasks = TaskSubmission.objects.filter(
+                student=student,
+                task__teacher=teacher,
+                is_done=True
+            ).count()
+
             completion_rate = round((submitted_tasks / total_tasks) * 100, 2) if total_tasks else 0
 
-            student_data = {
+            result.append({
                 "student": f"{student.name} {student.last_name}",
                 "total_tasks": total_tasks,
                 "submitted_tasks": submitted_tasks,
                 "completion_rate": completion_rate,
-                "tasks": task_grades
-            }
-            result.append(student_data)
+                "tasks": task_scores
+            })
 
-        return Response({
+        context = {
             "tasks": [t['title'] for t in task_list],
             "students": result
-        })
+        }
 
+        if request.accepted_renderer.format == 'html':
+            return Response(context, template_name=self.template_name)
+        return Response(context)
 
+class CourseStatsTableView(APIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'teacher/course_stats_table.html'
+    permission_classes = [IsAuthenticated, IsTeacher]
 
+    def get(self, request, course_id):
+        teacher = request.user.teacher_profile
+        tasks = Task.objects.filter(teacher=teacher, course_id=course_id).order_by('id')
+        task_names = [task.title for task in tasks]
 
+        students = Student.objects.filter(enrollments__course_id=course_id).distinct()
+        student_data = []
 
-@login_required
-def course_stats_table(request, course_id):
-    teacher = request.user.teacher_profile
+        for student in students:
+            total_tasks = tasks.count()
+            submissions = TaskSubmission.objects.filter(student=student, task__in=tasks)
 
-    # Belgilangan course ga tegishli tasklar
-    tasks = Task.objects.filter(teacher=teacher, course_id=course_id).order_by('id')
-    task_names = [task.title for task in tasks]
+            submitted_tasks = submissions.filter(is_done=True).count()
+            completion_rate = round((submitted_tasks / total_tasks) * 100, 2) if total_tasks else 0
 
-    students = Student.objects.filter(enrollments__course_id=course_id).distinct()
-    student_data = []
+            task_scores = {task.title: None for task in tasks}
+            for submission in submissions:
+                if submission.is_done:
+                    task_scores[submission.task.title] = submission.score
 
-    for student in students:
-        total_tasks = tasks.count()
-        submissions = TaskSubmission.objects.filter(student=student, task__in=tasks)
+            avg_score = (
+                submissions.aggregate(avg=Avg('score'))['avg']
+                if submitted_tasks > 0 else 0
+            )
 
-        submitted_tasks = submissions.filter(is_done=True).count()
-        completion_rate = round((submitted_tasks / total_tasks) * 100, 2) if total_tasks else 0
+            student_data.append({
+                "student": str(student),
+                "total_tasks": total_tasks,
+                "submitted_tasks": submitted_tasks,
+                "completion_rate": completion_rate,
+                "avg_score": round(avg_score or 0, 2),
+                "tasks": task_scores
+            })
 
-        task_grades = {task.title: None for task in tasks}
-        for submission in submissions:
-            if submission.is_done:
-                task_grades[submission.task.title] = submission.grade
+        context = {
+            "students": student_data,
+            "task_names": task_names
+        }
 
-        avg_grade = (
-            submissions.aggregate(avg=Avg('grade'))['avg']
-            if submitted_tasks > 0 else 0
-        )
+        if request.accepted_renderer.format == 'html':
+            return Response(context, template_name=self.template_name)
+        return Response(context)
 
-        student_data.append({
-            "student": str(student),
-            "total_tasks": total_tasks,
-            "submitted_tasks": submitted_tasks,
-            "completion_rate": completion_rate,
-            "avg_grade": round(avg_grade or 0, 2),
-            "tasks": task_grades
-        })
-
-    return render(request, "teacher/course_stats_table.html", {
-        "students": student_data,
-        "task_names": task_names,
+def CourseView(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    tasks = Task.objects.filter(course=course)
+    return render(request, 'student_tasks.html', {
+        'course': course,
+        'tasks': tasks
     })
 
-    
-class CourseView(viewsets.ModelViewSet):
-    queryset = Course.objects.all()
-    serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated]
-    def get_queryset(self):
-        return self.queryset.filter(teacher__user=self.request.user)
 
-    def perform_create(self, serializer):
-        if not hasattr(self.request.user, 'teacher_profile'):
-            raise ValueError("User does not have a teacher profile.")
-        serializer.save(teacher=self.request.user.teacher_profile)
 
-    def perform_update(self, serializer):
-        if not hasattr(self.request.user, 'teacher_profile'):
-            raise ValueError("User does not have a teacher profile.")
-        serializer.save(teacher=self.request.user.teacher_profile)
+@require_GET
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    """Get CSRF token for frontend"""
+    token = get_token(request)
+    return JsonResponse({
+        'csrfToken': token,
+        'detail': 'CSRF token generated successfully'
+    })
+
+# Alternative: Add @ensure_csrf_cookie to your registration views
+@ensure_csrf_cookie
+def register_student_view(request):
+    # Your existing registration logic
+    pass

@@ -38,7 +38,7 @@ class Teacher(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} {self.middle_name or ''} {self.last_name}"
+        return f"{self.name}  {self.last_name}"
 
 
 class Course(models.Model):
@@ -356,7 +356,7 @@ class Student(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} {self.middle_name or ''} {self.last_name}"
+        return f"{self.name} {self.last_name}"
 
 
 class Enrollment(models.Model):
@@ -375,7 +375,7 @@ class Task(models.Model):
     file = models.FileField(upload_to='tasks/', blank=True, null=True)
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='tasks')
     course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
-    max_grade = models.IntegerField(default=100)
+    max_score = models.IntegerField(default=100)
     
     due_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -392,7 +392,7 @@ class TaskSubmission(models.Model):
     submitted_text = models.TextField(blank=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
     is_done = models.BooleanField(default=False)
-    grade = models.IntegerField(blank=True, null=True)
+    score = models.IntegerField(blank=True, null=True)
     feedback = models.TextField(blank=True, null=True)  
     
 

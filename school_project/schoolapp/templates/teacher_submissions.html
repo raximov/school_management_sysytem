@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Submissions</title>
+</head>
+<body>
+    <h1>All Submissions</h1>
+    <ul>
+        {% for sub in submissions %}
+            <li>
+                Task: {{ sub.task.title }} — Student: {{ sub.student.user.username }}
+                <a href="{% url 'teacher_submit_task_retrieve' sub.id %}">View</a>
+            </li>
+        {% empty %}
+            <li>No submissions yet.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

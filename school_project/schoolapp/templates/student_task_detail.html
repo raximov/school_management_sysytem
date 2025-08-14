@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ task.title }}{% endblock %}
+
+{% block content %}
+    <h1>{{ task.title }}</h1>
+    <p>{{ task.description }}</p>
+    <form action="{% url 'submit_task' task.id %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <textarea name="submitted_text" placeholder="Enter your answer"></textarea><br>
+        <input type="file" name="submitted_file"><br>
+        <button type="submit">Submit Task</button>
+    </form>
+{% endblock %}

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teacher Tasks</title>
+</head>
+<body>
+    <h1>My Created Tasks</h1>
+    <a href="#">+ Create New Task</a>
+    <ul>
+        {% for task in tasks %}
+            <li>{{ task.title }} — <a href="{% url 'teacher_submit_task_list' %}">View Submissions</a></li>
+        {% empty %}
+            <li>No tasks yet.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
