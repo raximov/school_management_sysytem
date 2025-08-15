@@ -1,27 +1,5 @@
 from rest_framework import viewsets
 from rest_framework.generics import RetrieveUpdateDestroyAPIView, ListCreateAPIView
-from .models import Department, Classroom, Teacher, Student, Course, Enrollment, Task, TaskSubmission
-from .serializers import (
-    DepartmentSerializer, ClassroomSerializer,
-    TeacherSerializer, StudentSerializer,
-    CourseSerializer, EnrollmentSerializer, TaskSerializer, StudentSubmissionSerializer, TeacherSubmissionSerializer, StudentTaskStatsSerializer, 
-)
-from django.contrib.auth.forms import UserCreationForm
-from django.shortcuts import render, redirect
-from django.contrib.auth import login
-from django.contrib.auth.models import User
-from django.contrib.auth.views import LoginView, LogoutView
-
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from .forms import StudentRegisterForm  # Make sure this exists
-from rest_framework.decorators import api_view
-from django.shortcuts import get_object_or_404
-from .permissions import IsStudent, IsTeacher, IsAuthenticated
 from django.db.models import Count, Q, F, FloatField, ExpressionWrapper,Avg
 from collections import defaultdict
 from django.db.models import OuterRef, Subquery
@@ -33,40 +11,50 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 import json
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.forms import UserCreationForm
+from django.shortcuts import render, redirect
+from django.contrib.auth.models import User
 
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponseForbidden
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate, login
+
+from django.utils.decorators import method_decorator
+
+from .forms import StudentRegisterForm  # Make sure this exists
+from .permissions import IsStudent, IsTeacher, IsAuthenticated
+from .models import Department, Classroom, Teacher, Student, Course, Enrollment, Task, TaskSubmission
+from .serializers import (
+    DepartmentSerializer, ClassroomSerializer,
+    TeacherSerializer, StudentSerializer,
+    CourseSerializer, EnrollmentSerializer, TaskSerializer, StudentSubmissionSerializer, TeacherSubmissionSerializer, StudentTaskStatsSerializer, 
+)
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
 
-
 class ClassroomViewSet(viewsets.ModelViewSet):
     queryset = Classroom.objects.all()
     serializer_class = ClassroomSerializer
-
 
 class TeacherViewSet(viewsets.ModelViewSet):
     queryset = Teacher.objects.all()
     serializer_class = TeacherSerializer
 
-
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
 
-
 class CourseViewSet(viewsets.ModelViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
-
-
-from django.shortcuts import redirect
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework import viewsets
-from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
 @method_decorator(csrf_exempt, name='dispatch')  # testing / HTML forms uchun
 class EnrollmentViewSet(viewsets.ModelViewSet):
@@ -118,6 +106,30 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         return resp
 
 
+class RegisterStudentView(APIView):
+    permission_classes = [AllowAny]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'accounts/register_student.html'
+
+    def get(self, request):
+        form = StudentRegisterForm()
+        return Response({'form': form}, template_name=self.template_name)
+
+    def post(self, request):
+        form = StudentRegisterForm(request.POST, request.FILES)
+        if form.is_valid():
+            username = form.cleaned_data['username']
+            password = form.cleaned_data['password']
+            if User.objects.filter(username=username).exists():
+                form.add_error('username', 'This username is already taken.')
+            else:
+                user = User.objects.create_user(username=username, password=password)
+                student = form.save(commit=False)
+                student.user = user
+                student.save()
+                login(request, user)
+                return redirect('student_profile')
+        return Response({'form': form}, template_name=self.template_name)
 
 def register_student(request):
     if request.method == 'POST':
@@ -133,12 +145,39 @@ def register_student(request):
                 student.user = user
                 student.save()
                 login(request, user)
-                return redirect('student_dashboard')
+                return redirect('student_profile')
     else:
         form = StudentRegisterForm()
     return render(request, 'accounts/register_student.html', {'form': form})
 
+class RegisterTeacherView(APIView):
+    permission_classes = [AllowAny]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'accounts/register_teacher.html'
 
+    def get(self, request):
+        form = UserCreationForm()
+        return Response({'form': form}, template_name=self.template_name)
+
+    def post(self, request):
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.email = request.POST.get('email', '')
+            user.save()
+            # Always create a Teacher profile after registration
+            Teacher.objects.create(
+                user=user,
+                name=request.POST.get('name', ''),
+                middle_name=request.POST.get('middle_name', ''),
+                last_name=request.POST.get('last_name', ''),
+                email=user.email,
+                specialization=request.POST.get('specialization', ''),
+            )
+            login(request, user)
+            return redirect('teacher_profile')
+        return Response({'form': form}, template_name=self.template_name)
+    
 def register_teacher(request):
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
@@ -156,62 +195,154 @@ def register_teacher(request):
                 specialization=request.POST.get('specialization', ''),
             )
             login(request, user)
-            return redirect('teacher_dashboard')
+            return redirect('teacher_profile')
     else:
         form = UserCreationForm()
     return render(request, 'accounts/register_teacher.html', {'form': form})
 
-class CustomLoginView(LoginView):
+
+class CustomLoginAPIView(APIView):
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
     template_name = 'accounts/login.html'
 
-    def get_success_url(self):
-        user = self.request.user
-        if hasattr(user, 'student'):
-            return reverse_lazy('dashboard')
-        elif hasattr(user, 'teacher'):
-            return reverse_lazy('dashboard')
-        return reverse_lazy('dashboard')
+    def get(self, request):
+        # HTML sahifa render
+        if request.user.is_authenticated:
+            if hasattr(request.user, 'student_profile'):
+                redirect_url = reverse_lazy('student_profile')
+            elif hasattr(request.user, 'teacher_profile'):
+                redirect_url = reverse_lazy('teacher_profile')
+            else:
+                redirect_url = reverse_lazy('home')
+            return Response({"authenticated": True, "redirect_url": str(redirect_url)})
 
-class CustomLogoutView(LogoutView):
-    def get(self, request, *args, **kwargs):
-        return self.post(request, *args, **kwargs)
+        # Sahifani HTML bilan render qilish
+        return Response({}, template_name=self.template_name)
 
-@login_required
-def post_login_redirect(request):
-    if hasattr(request.user, 'student_profile'):
-        return redirect('student_dashboard')
-    elif hasattr(request.user, 'teacher_profile'):
-        return redirect('teacher_dashboard')
-    return render(request, 'home.html')
+    def post(self, request):
+        # HTML form POST bo‘lsa request.data o‘rniga request.POST ishlatish xavfsiz
+        username = request.POST.get("username") or request.data.get("username")
+        password = request.POST.get("password") or request.data.get("password")
 
-@login_required
-@api_view(['GET'])
-def student_dashboard(request):
-    if not hasattr(request.user, 'student_profile'):
-        return HttpResponseForbidden("You are not authorized to view this page.")
-     
-    student = Student.objects.filter(user=request.user).first()
- 
-    return render(request, 'accounts/student_dashboard.html', {'student': student})
+        if not username or not password:
+            return Response(
+                {"error": "Username and password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+                template_name=self.template_name
+            )
 
-@login_required
-@api_view(['GET'])
-def teacher_dashboard(request):
-    if not hasattr(request.user, 'teacher_profile'):
-        raise request.user.objects.filter(user=request.user).first()
-    teacher = Teacher.objects.filter(user=request.user).first()
-    return render(request, 'accounts/teacher_dashboard.html', {'teacher': teacher})
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            if hasattr(user, 'student_profile'):
+                redirect_url = reverse_lazy('student_profile')
+            elif hasattr(user, 'teacher_profile'):
+                redirect_url = reverse_lazy('teacher_profile')
+            else:
+                redirect_url = reverse_lazy('home')
 
-@login_required
-def dashboard_redirect(request):
-    if hasattr(request.user, 'student_profile'):
-        return redirect('student_dashboard')
-    elif hasattr(request.user, 'teacher_profile'):
-        return redirect('teacher_dashboard')
-    return render(request, 'home.html')
+            # Agar HTML form POST bo‘lsa, redirect qilish
+            if request.accepted_renderer.format == 'html':
+                return redirect(redirect_url)
+
+            # Agar API POST bo‘lsa, JSON qaytarish
+            return Response({
+                "detail": "Login successful",
+                "redirect_url": str(redirect_url)
+            }, status=status.HTTP_200_OK)
+
+        return Response(
+            {"error": "Invalid username or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+            template_name=self.template_name
+        )
+
+
+
+class CustomLogoutAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    next_page = None  # default value
+
+    def post(self, request):
+        from django.contrib.auth import logout
+        from django.urls import reverse_lazy
+
+        logout(request)
+        redirect_url = reverse_lazy(self.next_page or 'login')
+        return Response({"detail": "Logged out successfully", "redirect_url": str(redirect_url)})
+
+
+
+class PostLoginRedirectAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'accounts/login.html'
+
+    def get(self, request):
+        if hasattr(request.user, 'student_profile'):
+            return Response({"redirect_url": reverse_lazy('student_profile')})
+        elif hasattr(request.user, 'teacher_profile'):
+            return Response({"redirect_url": reverse_lazy('teacher_profile')})
+        return Response({"redirect_url": reverse_lazy('home')})
+
+
+class StudentProfileAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'student_profile.html'
+
+    def get(self, request):
+        if not hasattr(request.user, 'student_profile'):
+            return Response({"error": "You are not authorized to view this page."}, status=status.HTTP_403_FORBIDDEN)
+
+        student = Student.objects.filter(user=request.user).first()
+        if not student:
+            return Response({"error": "Student profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "id": student.id,
+            "name": student.user.get_full_name(),
+            "email": student.user.email,
+            # Add other student fields here
+        })
+
+
+class TeacherProfileAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+    template_name = 'accounts/teacher_profile.html'
+
+    def get(self, request):
+        if not hasattr(request.user, 'teacher_profile'):
+            return Response({"error": "You are not authorized to view this page."}, status=status.HTTP_403_FORBIDDEN)
+
+        teacher = Teacher.objects.filter(user=request.user).first()
+        if not teacher:
+            return Response({"error": "Teacher profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "id": teacher.id,
+            "name": teacher.user.get_full_name(),
+            "email": teacher.user.email,
+            # Add other teacher fields here
+        })
+
+
+class ProfileRedirectAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    renderer_classes = [TemplateHTMLRenderer]
+
+    def get(self, request):
+        if hasattr(request.user, 'student_profile'):
+            return Response({}, template_name='accounts/student_profile.html')
+        elif hasattr(request.user, 'teacher_profile'):
+            return Response({}, template_name='accounts/teacher_profile.html')
+        return Response({}, template_name='home.html')
+
 
 class MyProtectedView(APIView):
     permission_classes = [IsAuthenticated]
+    
     """
     A protected view that requires authentication.
     """

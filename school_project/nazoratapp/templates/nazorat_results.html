@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nazorat Results</title>
+</head>
+<body>
+    <h1>Nazorat Results</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Nazorat</th>
+                <th>Student</th>
+                <th>Best Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for nazorat in nazorats %}
+                {% for result in nazorat.results %}
+                    <tr>
+                        <td>{{ nazorat.title }}</td>
+                        <td>{{ result.student__user__first_name }} {{ result.student__user__last_name }}</td>
+                        <td>{{ result.best_score }}</td>
+                    </tr>
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

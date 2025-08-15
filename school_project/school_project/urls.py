@@ -29,10 +29,11 @@ from drf_spectacular.views import (
 
 
 urlpatterns = [
-    path('', views.dashboard_redirect, name='home'),
+    path('', views.ProfileRedirectAPIView.as_view(), name='home'),
     path('admin/', admin.site.urls),
     path('school/',include('schoolapp.urls')),
     path('testapp/', include('testapp.urls', namespace='testapp')),
+    path('nazorat/', include('nazoratapp.urls')),
     path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
      # API schema
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

@@ -1,13 +1,14 @@
 from django.urls import path, include
 from .views import (
-    register_student, register_teacher, student_dashboard, teacher_dashboard,\
-    CustomLoginView, post_login_redirect, dashboard_redirect,\
+    register_student, register_teacher, StudentProfileAPIView, TeacherProfileAPIView,\
+    CustomLoginAPIView, PostLoginRedirectAPIView, ProfileRedirectAPIView,\
     MyProtectedView, MyPublicView, StudentTasksListView, StudentTasksView, \
     SubmitTaskView,TeacherTaskViewSet, \
         TeacherSubmitRetrieveUpdateDestroyView, TeacherSubmitListCreateView, \
             CourseStatsView, CourseView, TaskStatsTableView, \
-            EnrollmentViewSet, CourseStatsTableView, CustomLogoutView, get_csrf_token,\
+            EnrollmentViewSet, CourseStatsTableView, CustomLogoutAPIView, get_csrf_token,\
             CourseViewSet, StudentViewSet, TeacherViewSet, EnrollmentViewSet,\
+            RegisterStudentView, RegisterTeacherView
 
 )
 from rest_framework.routers import DefaultRouter
@@ -26,15 +27,16 @@ urlpatterns = [
 
     path('api/csrf/', get_csrf_token, name='get_csrf_token'),
 
-    path('',CustomLoginView.as_view(next_page = 'dashboard'), name='login'),
-    path('register/student/', register_student, name='register_student'),
-    path('register/teacher/', register_teacher, name='register_teacher'),
-    path('login/', CustomLoginView.as_view(next_page = 'dashboard'), name='login'),
-    path('logout/', CustomLogoutView.as_view(next_page='login'), name='logout'),
-    path('dashboard/', dashboard_redirect, name='dashboard'),
-    path('student/', student_dashboard, name='student_dashboard'),
-    path('teacher/', teacher_dashboard, name='teacher_dashboard'),
-    path('redirect/', post_login_redirect, name='post_login_redirect'),
+    path('',CustomLoginAPIView.as_view(), name='login'),
+    path('register/student/', RegisterStudentView.as_view(), name='register_student'),
+
+    path('register/teacher/', RegisterTeacherView.as_view(), name='register_teacher'),
+    path('login/', CustomLoginAPIView.as_view(), name='login'),
+    path('logout/', CustomLogoutAPIView.as_view(), name='logout'),
+    path('profile/', ProfileRedirectAPIView.as_view(), name='profile'),
+    path('student/', StudentProfileAPIView.as_view(), name='student_profile'),
+    path('teacher/', TeacherProfileAPIView.as_view(), name='teacher_profile'),
+    path('redirect/', PostLoginRedirectAPIView.as_view(), name='post_login_redirect'),
 
     path('api/protected/', MyProtectedView.as_view(), name='api_protected'),
     path('api/public/', MyPublicView.as_view(), name='api_public'),

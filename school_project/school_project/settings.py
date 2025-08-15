@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'phonenumber_field',
     'schoolapp',
     'testapp',
+    'nazoratapp',
     'rest_framework.authtoken',
     'import_export',
     'django_seed',
@@ -71,6 +72,7 @@ MIDDLEWARE = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:5173",
 ]
 
 
