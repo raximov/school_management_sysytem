@@ -1,6 +1,14 @@
 from django.urls import path, include
 from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
+
+from .api_views_v1 import (
+    StudentAvailableTestsAPIView,
+    StudentStartAttemptAPIView,
+    StudentSubmitAttemptAPIView,
+    StudentAttemptResultAPIView,
+    TeacherTestResultsAPIView as TeacherTestResultsAPIV1,
+)
 from .views import (
     StudentAssignedTestsView, SubmitAnswersView, StudentTestResultView,\
     TeacherTestResultsView,  submit_test_view, \
@@ -20,6 +28,11 @@ router.register(r'teacher/enrollment', EnrollmentTestViewSet, basename='teacher-
 router.register(r'enrollment-tests', EnrollmentTestViewSet, basename='enrollment-test')
 
 urlpatterns = [
+    path('api/v1/student/tests/', StudentAvailableTestsAPIView.as_view(), name='api_v1_student_tests'),
+    path('api/v1/student/tests/<int:test_id>/start/', StudentStartAttemptAPIView.as_view(), name='api_v1_student_start_attempt'),
+    path('api/v1/student/attempts/<int:attempt_id>/submit/', StudentSubmitAttemptAPIView.as_view(), name='api_v1_student_submit_attempt'),
+    path('api/v1/student/attempts/<int:attempt_id>/result/', StudentAttemptResultAPIView.as_view(), name='api_v1_student_attempt_result'),
+    path('api/v1/teacher/tests/<int:test_id>/results/', TeacherTestResultsAPIV1.as_view(), name='api_v1_teacher_test_results'),
     path('teacher/enrollment/', TemplateView.as_view(template_name="teacher/enrollment_test_crud.html"), name='enrollment_test_crud'),
 
     path('teacher-panel/', teacher_panel, name='teacher-panel'),
