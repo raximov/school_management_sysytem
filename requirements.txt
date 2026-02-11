@@ -1,0 +1,10 @@
+Django>=5.2,<6.0
+djangorestframework>=3.15
+psycopg2-binary>=2.9
+drf-spectacular>=0.27
+djangorestframework-simplejwt>=5.3
+django-cors-headers>=4.4
+django-phonenumber-field[phonenumbers]>=8.0
+django-import-export>=4.1
+django-seed>=0.3
+Pillow>=10.0
