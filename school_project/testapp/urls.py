@@ -8,6 +8,7 @@ from .api_views_v1 import (
     StudentSubmitAttemptAPIView,
     StudentAttemptResultAPIView,
     TeacherTestResultsAPIView as TeacherTestResultsAPIV1,
+    TeacherAttemptDetailsAPIView as TeacherAttemptDetailsAPIV1,
 )
 from .views import (
     StudentAssignedTestsView, SubmitAnswersView, StudentTestResultView,\
@@ -33,6 +34,7 @@ urlpatterns = [
     path('api/v1/student/attempts/<int:attempt_id>/submit/', StudentSubmitAttemptAPIView.as_view(), name='api_v1_student_submit_attempt'),
     path('api/v1/student/attempts/<int:attempt_id>/result/', StudentAttemptResultAPIView.as_view(), name='api_v1_student_attempt_result'),
     path('api/v1/teacher/tests/<int:test_id>/results/', TeacherTestResultsAPIV1.as_view(), name='api_v1_teacher_test_results'),
+    path('api/v1/teacher/attempts/<int:attempt_id>/details/', TeacherAttemptDetailsAPIV1.as_view(), name='api_v1_teacher_attempt_details'),
     path('teacher/enrollment/', TemplateView.as_view(template_name="teacher/enrollment_test_crud.html"), name='enrollment_test_crud'),
 
     path('teacher-panel/', teacher_panel, name='teacher-panel'),

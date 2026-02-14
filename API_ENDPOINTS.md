@@ -26,6 +26,16 @@ Base prefix: `/testapp/`
 - `GET /testapp/api/v1/teacher/tests/{test_id}/results/`  
   Get all attempt results for a teacher-owned test.
 
+## Frontend Mock Data Endpoint
+Base prefix: `/school/`
+
+- `GET /school/api/mock-data/`
+  Returns frontend-ready payload from backend data (students, courses, enrollments, tasks, tests) without authentication.
+  If database has no records, it returns built-in fallback mock records.
+
+Optional query param:
+- `limit` (default `20`, min `1`, max `100`) to limit each list size.
+
 ## Requirements
 Install dependencies from:
 - `requirements.txt`

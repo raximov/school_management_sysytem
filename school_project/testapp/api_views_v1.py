@@ -52,14 +52,65 @@ class StudentStartAttemptAPIView(APIView):
 
     def post(self, request, test_id: int):
         student = request.user.student_profile
-        test = get_object_or_404(Test, id=test_id)
+        test = get_object_or_404(
+            Test.objects.prefetch_related("questions__answer_options"),
+            id=test_id,
+        )
 
-        attempt, _ = TestAttempt.objects.get_or_create(student=student, test=test)
+        # Start endpoint should always create a fresh attempt.
+        attempt = TestAttempt.objects.create(student=student, test=test)
+        questions_payload = []
+
+        for question in test.questions.all():
+            answers = list(question.answer_options.all())
+            question_payload = {
+                "id": question.id,
+                "text": question.text,
+                "question_type": question.question_type,
+                "mark": question.mark,
+                "answer_options": [],
+            }
+
+            # Choice-like questions: return options without correctness metadata.
+            if question.question_type in {"OC", "MC", "ORD", "MAT"}:
+                options = []
+                for answer in answers:
+                    option_payload = {
+                        "id": answer.id,
+                        "text": answer.text,
+                    }
+                    if question.question_type == "ORD" and answer.order is not None:
+                        option_payload["order"] = answer.order
+                    if question.question_type == "MAT" and answer.match_text:
+                        option_payload["match_text"] = answer.match_text
+                    options.append(option_payload)
+
+                question_payload["answer_options"] = options
+
+            # Written questions: expose only input mode, never expected answer text.
+            if question.question_type == "WR":
+                input_kind = "text"
+                correct_answer = next((a for a in answers if a.is_correct), None)
+                if correct_answer:
+                    try:
+                        Decimal((correct_answer.text or "").strip())
+                        input_kind = "numeric"
+                    except (InvalidOperation, ValueError):
+                        input_kind = "text"
+                question_payload["input_kind"] = input_kind
+
+            questions_payload.append(question_payload)
+
         return Response(
             {
                 "attempt_id": attempt.id,
                 "test_id": test.id,
                 "started_at": attempt.started_at,
+                "test": {
+                    "id": test.id,
+                    "title": test.title,
+                    "questions": questions_payload,
+                },
             },
             status=status.HTTP_201_CREATED,
         )
@@ -203,8 +254,27 @@ class TeacherTestResultsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, test_id: int):
-        test = get_object_or_404(Test, id=test_id, teacher=request.user.teacher_profile)
-        attempts = TestAttempt.objects.filter(test=test).select_related("student__user")
+        teacher = getattr(request.user, "teacher_profile", None)
+        if teacher is None:
+            return Response(
+                {"detail": "Only teachers can access test results."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        test = get_object_or_404(
+            Test.objects.prefetch_related("questions"),
+            id=test_id,
+            teacher=teacher,
+        )
+        attempts = (
+            TestAttempt.objects.filter(test=test, completed_at__isnull=False)
+            .select_related("student__user")
+            .order_by("-completed_at", "-id")
+        )
+        max_score = sum(
+            (Decimal(str(question.mark)) for question in test.questions.all()),
+            start=Decimal("0"),
+        )
 
         return Response(
             [
@@ -213,9 +283,111 @@ class TeacherTestResultsAPIView(APIView):
                     "student_id": a.student_id,
                     "student_name": str(a.student),
                     "score": a.score,
+                    "max_score": float(max_score),
                     "percentage": a.percentage,
                     "completed_at": a.completed_at,
                 }
                 for a in attempts
             ]
+        )
+
+
+class TeacherAttemptDetailsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, attempt_id: int):
+        teacher = getattr(request.user, "teacher_profile", None)
+        if teacher is None:
+            return Response(
+                {"detail": "Only teachers can access attempt details."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        attempt = get_object_or_404(
+            TestAttempt.objects.select_related("student__user", "test")
+            .prefetch_related("test__questions__answer_options"),
+            id=attempt_id,
+            test__teacher=teacher,
+        )
+
+        answers = (
+            StudentAnswer.objects.filter(attempt=attempt)
+            .select_related("question")
+            .prefetch_related("selected_answers")
+        )
+        answers_by_question_id = {answer.question_id: answer for answer in answers}
+
+        questions = list(attempt.test.questions.all())
+        max_score = sum(
+            (Decimal(str(question.mark)) for question in questions),
+            start=Decimal("0"),
+        )
+
+        def map_question_type(question: Question) -> str:
+            if question.question_type == "OC":
+                return "single"
+            if question.question_type == "MC":
+                return "multiple"
+            if question.question_type == "WR":
+                correct_answer = next(
+                    (option for option in question.answer_options.all() if option.is_correct),
+                    None,
+                )
+                if correct_answer:
+                    try:
+                        Decimal((correct_answer.text or "").strip())
+                        return "numeric"
+                    except (InvalidOperation, ValueError):
+                        return "short"
+                return "short"
+            return "short"
+
+        questions_payload = []
+        for question in questions:
+            student_answer = answers_by_question_id.get(question.id)
+            selected_answers = []
+            written_answer = ""
+            scored_mark = 0.0
+
+            if student_answer:
+                selected_answers = [
+                    {"id": selected.id, "text": selected.text}
+                    for selected in student_answer.selected_answers.all()
+                ]
+                written_answer = student_answer.written_answer or ""
+                scored_mark = float(student_answer.scored_mark or 0)
+
+            correct_answers = [
+                {"id": option.id, "text": option.text}
+                for option in question.answer_options.all()
+                if option.is_correct
+            ]
+
+            questions_payload.append(
+                {
+                    "question_id": question.id,
+                    "prompt": question.text,
+                    "question_type": map_question_type(question),
+                    "score": scored_mark,
+                    "max_score": float(question.mark),
+                    "written_answer": written_answer,
+                    "selected_answers": selected_answers,
+                    "correct_answers": correct_answers,
+                }
+            )
+
+        return Response(
+            {
+                "attempt_id": attempt.id,
+                "test_id": attempt.test_id,
+                "test_title": attempt.test.title,
+                "student_id": attempt.student_id,
+                "student_name": str(attempt.student),
+                "score": attempt.score,
+                "max_score": float(max_score),
+                "percentage": attempt.percentage,
+                "started_at": attempt.started_at,
+                "completed_at": attempt.completed_at,
+                "questions": questions_payload,
+            }
         )

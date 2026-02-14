@@ -5,12 +5,18 @@ from collections import defaultdict
 from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.urls import reverse_lazy
+from urllib.parse import parse_qsl
 from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
+from datetime import timedelta
 import json
+import hashlib
+import hmac
+import time
+import os
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render, redirect
@@ -22,8 +28,10 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login
+from django.utils import timezone
 
 from django.utils.decorators import method_decorator
 
@@ -258,6 +266,135 @@ class CustomLoginAPIView(APIView):
         )
 
 
+class TelegramWebAppLoginAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        init_data = (request.data.get("initData") or "").strip()
+        role_hint = (request.data.get("roleHint") or "student").strip().lower()
+        bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+        max_age = self._parse_max_age(os.getenv("TELEGRAM_AUTH_MAX_AGE_SEC", "86400"))
+
+        if not init_data:
+            return Response({"detail": "initData is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not bot_token:
+            return Response({"detail": "TELEGRAM_BOT_TOKEN is not configured."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            telegram_user = self._validate_init_data(init_data, bot_token, max_age)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+
+        telegram_id = telegram_user["id"]
+        username = f"tg_{telegram_id}"
+        first_name = (telegram_user.get("first_name") or "").strip()
+        last_name = (telegram_user.get("last_name") or "").strip()
+
+        user, created = User.objects.get_or_create(username=username)
+        if created:
+            user.first_name = first_name
+            user.last_name = last_name
+            user.email = f"{username}@telegram.local"
+            user.set_unusable_password()
+            user.save(update_fields=["first_name", "last_name", "email", "password"])
+        else:
+            changed_fields = []
+            if first_name and user.first_name != first_name:
+                user.first_name = first_name
+                changed_fields.append("first_name")
+            if last_name and user.last_name != last_name:
+                user.last_name = last_name
+                changed_fields.append("last_name")
+            if changed_fields:
+                user.save(update_fields=changed_fields)
+
+        role = self._ensure_role_profile(user, role_hint, first_name, last_name, telegram_id)
+        token, _ = Token.objects.get_or_create(user=user)
+
+        return Response(
+            {
+                "token": token.key,
+                "role": role,
+                "expiresAt": (timezone.now() + timedelta(hours=8)).isoformat(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _ensure_role_profile(self, user, role_hint, first_name, last_name, telegram_id):
+        if hasattr(user, "teacher_profile"):
+            return "teacher"
+        if hasattr(user, "student_profile"):
+            return "student"
+
+        teacher_ids = self._parse_teacher_ids(os.getenv("TELEGRAM_TEACHER_IDS", ""))
+        if role_hint == "teacher" and str(telegram_id) in teacher_ids:
+            Teacher.objects.create(
+                user=user,
+                name=first_name or "Teacher",
+                last_name=last_name or "User",
+                email=user.email or f"{user.username}@telegram.local",
+            )
+            return "teacher"
+
+        Student.objects.create(
+            user=user,
+            name=first_name or "Student",
+            last_name=last_name or "User",
+        )
+        return "student"
+
+    def _parse_teacher_ids(self, raw_value):
+        return {item.strip() for item in raw_value.split(",") if item.strip()}
+
+    def _parse_max_age(self, value):
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 86400
+        return max(60, parsed)
+
+    def _validate_init_data(self, init_data, bot_token, max_age):
+        parts = dict(parse_qsl(init_data, keep_blank_values=True))
+        provided_hash = parts.pop("hash", "")
+        if not provided_hash:
+            raise ValueError("hash is missing in initData.")
+
+        auth_date_raw = parts.get("auth_date")
+        if not auth_date_raw:
+            raise ValueError("auth_date is missing in initData.")
+
+        try:
+            auth_date = int(auth_date_raw)
+        except (TypeError, ValueError):
+            raise ValueError("auth_date is invalid.") from None
+
+        now_ts = int(time.time())
+        if now_ts - auth_date > max_age:
+            raise ValueError("initData expired.")
+
+        data_check_string = "\n".join(f"{key}={value}" for key, value in sorted(parts.items()))
+        secret_key = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(calculated_hash, provided_hash):
+            raise ValueError("Invalid Telegram signature.")
+
+        user_raw = parts.get("user")
+        if not user_raw:
+            raise ValueError("user payload is missing in initData.")
+
+        try:
+            user_data = json.loads(user_raw)
+        except json.JSONDecodeError:
+            raise ValueError("user payload is invalid JSON.") from None
+
+        if not isinstance(user_data, dict) or "id" not in user_data:
+            raise ValueError("user payload is invalid.")
+
+        return user_data
+
+
 
 class CustomLogoutAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -356,6 +493,189 @@ class MyPublicView(APIView):
     """
     def get(self, request):
         return Response({"message": "This is a public view."}, status=status.HTTP_200_OK)
+
+
+class FrontendMockDataAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from testapp.models import Test
+
+        limit = self._parse_limit(request.query_params.get("limit"))
+        students = Student.objects.select_related("user").order_by("id")[:limit]
+        courses = Course.objects.select_related("teacher__user").order_by("id")[:limit]
+        enrollments = Enrollment.objects.select_related("student", "course").order_by("id")[:limit]
+        tasks = Task.objects.select_related("course", "teacher").order_by("id")[:limit]
+        tests = (
+            Test.objects.select_related("teacher__user")
+            .annotate(question_count=Count("questions"))
+            .order_by("id")[:limit]
+        )
+
+        def student_name(student):
+            if student.user:
+                full_name = student.user.get_full_name().strip()
+                if full_name:
+                    return full_name
+            fallback = " ".join(part for part in [student.name, student.last_name] if part).strip()
+            return fallback or f"Student {student.id}"
+
+        def teacher_name(teacher):
+            if teacher and teacher.user:
+                full_name = teacher.user.get_full_name().strip()
+                if full_name:
+                    return full_name
+            if not teacher:
+                return ""
+            fallback = " ".join(part for part in [teacher.name, teacher.last_name] if part).strip()
+            return fallback or f"Teacher {teacher.id}"
+
+        payload = {
+            "source": "database",
+            "summary": {
+                "students": Student.objects.count(),
+                "courses": Course.objects.count(),
+                "enrollments": Enrollment.objects.count(),
+                "tasks": Task.objects.count(),
+                "tests": Test.objects.count(),
+            },
+            "students": [
+                {
+                    "id": student.id,
+                    "name": student_name(student),
+                    "email": student.email or (student.user.email if student.user else ""),
+                }
+                for student in students
+            ],
+            "courses": [
+                {
+                    "id": course.id,
+                    "title": course.title,
+                    "teacher_id": course.teacher_id,
+                    "teacher_name": teacher_name(course.teacher),
+                    "schedule": course.schedule,
+                }
+                for course in courses
+            ],
+            "enrollments": [
+                {
+                    "id": enrollment.id,
+                    "student_id": enrollment.student_id,
+                    "course_id": enrollment.course_id,
+                }
+                for enrollment in enrollments
+            ],
+            "tasks": [
+                {
+                    "id": task.id,
+                    "title": task.title,
+                    "course_id": task.course_id,
+                    "teacher_id": task.teacher_id,
+                    "max_score": task.max_score,
+                    "due_date": task.due_date.isoformat() if task.due_date else None,
+                }
+                for task in tasks
+            ],
+            "tests": [
+                {
+                    "id": test.id,
+                    "title": test.title,
+                    "teacher_id": test.teacher_id,
+                    "teacher_name": teacher_name(test.teacher),
+                    "question_count": test.question_count,
+                    "created_at": test.created_at.isoformat() if test.created_at else None,
+                }
+                for test in tests
+            ],
+        }
+
+        if all(
+            not payload[key]
+            for key in ["students", "courses", "enrollments", "tasks", "tests"]
+        ):
+            payload.update(self._fallback_payload())
+            payload["source"] = "fallback"
+            payload["summary"] = {
+                "students": len(payload["students"]),
+                "courses": len(payload["courses"]),
+                "enrollments": len(payload["enrollments"]),
+                "tasks": len(payload["tasks"]),
+                "tests": len(payload["tests"]),
+            }
+
+        return Response(payload, status=status.HTTP_200_OK)
+
+    def _parse_limit(self, raw_limit):
+        try:
+            limit = int(raw_limit) if raw_limit is not None else 20
+        except (TypeError, ValueError):
+            limit = 20
+        return max(1, min(limit, 100))
+
+    def _fallback_payload(self):
+        return {
+            "students": [
+                {"id": 1, "name": "Ali Valiyev", "email": "ali@student.local"},
+                {"id": 2, "name": "Laylo Karimova", "email": "laylo@student.local"},
+            ],
+            "courses": [
+                {
+                    "id": 1,
+                    "title": "Mathematics",
+                    "teacher_id": 1,
+                    "teacher_name": "John Doe",
+                    "schedule": {"days": [1, 3, 5], "time": "09:00 - 10:30"},
+                },
+                {
+                    "id": 2,
+                    "title": "Physics",
+                    "teacher_id": 2,
+                    "teacher_name": "Jane Smith",
+                    "schedule": {"days": [2, 4], "time": "11:00 - 12:30"},
+                },
+            ],
+            "enrollments": [
+                {"id": 1, "student_id": 1, "course_id": 1},
+                {"id": 2, "student_id": 1, "course_id": 2},
+                {"id": 3, "student_id": 2, "course_id": 1},
+            ],
+            "tasks": [
+                {
+                    "id": 1,
+                    "title": "Algebra Worksheet",
+                    "course_id": 1,
+                    "teacher_id": 1,
+                    "max_score": 100,
+                    "due_date": "2026-03-01",
+                },
+                {
+                    "id": 2,
+                    "title": "Newton Laws Lab",
+                    "course_id": 2,
+                    "teacher_id": 2,
+                    "max_score": 100,
+                    "due_date": "2026-03-05",
+                },
+            ],
+            "tests": [
+                {
+                    "id": 1,
+                    "title": "Math Quiz 1",
+                    "teacher_id": 1,
+                    "teacher_name": "John Doe",
+                    "question_count": 10,
+                    "created_at": "2026-02-10T09:00:00Z",
+                },
+                {
+                    "id": 2,
+                    "title": "Physics Quiz 1",
+                    "teacher_id": 2,
+                    "teacher_name": "Jane Smith",
+                    "question_count": 8,
+                    "created_at": "2026-02-11T10:30:00Z",
+                },
+            ],
+        }
 
 # The HTML form and JavaScript code have been removed from this Python file.
 # Please place your form and script in a Django template (e.g., templates/accounts/register_student.html).

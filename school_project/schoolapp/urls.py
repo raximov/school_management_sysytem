@@ -8,7 +8,7 @@ from .views import (
             CourseStatsView, CourseView, TaskStatsTableView, \
             EnrollmentViewSet, CourseStatsTableView, CustomLogoutAPIView, get_csrf_token,\
             CourseViewSet, StudentViewSet, TeacherViewSet, EnrollmentViewSet,\
-            RegisterStudentView, RegisterTeacherView
+            RegisterStudentView, RegisterTeacherView, FrontendMockDataAPIView, TelegramWebAppLoginAPIView
 
 )
 from rest_framework.routers import DefaultRouter
@@ -31,6 +31,7 @@ urlpatterns = [
     path('register/student/', RegisterStudentView.as_view(), name='register_student'),
 
     path('register/teacher/', RegisterTeacherView.as_view(), name='register_teacher'),
+    path('telegram/login/', TelegramWebAppLoginAPIView.as_view(), name='telegram_login'),
     path('login/', CustomLoginAPIView.as_view(), name='login'),
     path('logout/', CustomLogoutAPIView.as_view(), name='logout'),
     path('profile/', ProfileRedirectAPIView.as_view(), name='profile'),
@@ -40,6 +41,7 @@ urlpatterns = [
 
     path('api/protected/', MyProtectedView.as_view(), name='api_protected'),
     path('api/public/', MyPublicView.as_view(), name='api_public'),
+    path('api/mock-data/', FrontendMockDataAPIView.as_view(), name='api_mock_data'),
 
     path('student/tasks/', StudentTasksListView.as_view(), name='student_tasks'),
     path('student/tasks/<int:pk>/', StudentTasksView.as_view(), name='submit_task'),
@@ -58,4 +60,3 @@ urlpatterns = [
 
     path('teacher/task-stats/<int:pk>/', TaskStatsTableView.as_view(), name='task_stats_detail'),
 ]
-
