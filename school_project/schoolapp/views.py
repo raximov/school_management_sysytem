@@ -30,6 +30,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from django.views.decorators.csrf import csrf_exempt
@@ -64,6 +65,14 @@ class SafeObtainAuthToken(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
         try:
             return super().post(request, *args, **kwargs)
+        except ValidationError as exc:
+            # Invalid credentials should stay a client error, not 500.
+            detail = "Unable to log in with provided credentials."
+            if isinstance(exc.detail, dict):
+                non_field = exc.detail.get("non_field_errors")
+                if non_field:
+                    detail = str(non_field[0])
+            return Response({"detail": detail, "errorType": "ValidationError"}, status=status.HTTP_400_BAD_REQUEST)
         except DatabaseError as exc:
             return _database_error_response(exc)
         except Exception as exc:  # noqa: BLE001
@@ -362,22 +371,37 @@ class TelegramWebAppLoginAPIView(APIView):
         if hasattr(user, "student_profile"):
             return "student"
 
+        student_name = self._fit_to_model(Student, "name", first_name or "Student")
+        student_last_name = self._fit_to_model(Student, "last_name", last_name or "User")
+        teacher_name = self._fit_to_model(Teacher, "name", first_name or "Teacher")
+        teacher_last_name = self._fit_to_model(Teacher, "last_name", last_name or "User")
+
         teacher_ids = self._parse_teacher_ids(os.getenv("TELEGRAM_TEACHER_IDS", ""))
         if role_hint == "teacher" and str(telegram_id) in teacher_ids:
             Teacher.objects.create(
                 user=user,
-                name=first_name or "Teacher",
-                last_name=last_name or "User",
+                name=teacher_name,
+                last_name=teacher_last_name,
                 email=user.email or f"{user.username}@telegram.local",
             )
             return "teacher"
 
         Student.objects.create(
             user=user,
-            name=first_name or "Student",
-            last_name=last_name or "User",
+            name=student_name,
+            last_name=student_last_name,
         )
         return "student"
+
+    def _fit_to_model(self, model_cls, field_name, value):
+        text = (value or "").strip()
+        if not text:
+            return text
+
+        max_len = getattr(model_cls._meta.get_field(field_name), "max_length", None)
+        if isinstance(max_len, int) and max_len > 0:
+            return text[:max_len]
+        return text
 
     def _parse_teacher_ids(self, raw_value):
         return {item.strip() for item in raw_value.split(",") if item.strip()}
