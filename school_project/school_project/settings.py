@@ -66,6 +66,8 @@ def _first_non_empty(*values):
         if value is None:
             continue
         text = str(value).strip()
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            text = text[1:-1].strip()
         if text:
             return text
     return ""
@@ -107,6 +109,7 @@ def _build_database_settings():
     database_url = _first_non_empty(
         os.getenv("DATABASE_URL"),
         os.getenv("POSTGRES_URL"),
+        os.getenv("POSTGRES_PRISMA_URL"),
         os.getenv("DATABASE_URL_UNPOOLED"),
         os.getenv("POSTGRES_URL_NON_POOLING"),
     )
