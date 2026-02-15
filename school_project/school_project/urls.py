@@ -18,7 +18,6 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from rest_framework.authtoken.views import obtain_auth_token
 from schoolapp import views
 from django.urls import path
 from drf_spectacular.views import (
@@ -34,7 +33,7 @@ urlpatterns = [
     path('school/',include('schoolapp.urls')),
     path('testapp/', include('testapp.urls', namespace='testapp')),
     path('nazorat/', include('nazoratapp.urls')),
-    path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
+    path('api-token-auth/', views.SafeObtainAuthToken.as_view(), name='api_token_auth'),
      # API schema
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
 

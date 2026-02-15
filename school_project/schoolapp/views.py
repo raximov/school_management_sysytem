@@ -24,11 +24,14 @@ from django.contrib.auth.models import User
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
+from django.conf import settings
+from django.db import DatabaseError
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.models import Token
+from rest_framework.authtoken.views import ObtainAuthToken
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login
 from django.utils import timezone
@@ -43,6 +46,23 @@ from .serializers import (
     TeacherSerializer, StudentSerializer,
     CourseSerializer, EnrollmentSerializer, TaskSerializer, StudentSubmissionSerializer, TeacherSubmissionSerializer, StudentTaskStatsSerializer, 
 )
+
+
+def _database_error_response(exc):
+    detail = "Database is not ready. Check DB env variables and run migrations."
+    if settings.DEBUG:
+        detail = f"Database error: {exc}"
+    return Response({"detail": detail}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SafeObtainAuthToken(ObtainAuthToken):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            return super().post(request, *args, **kwargs)
+        except DatabaseError as exc:
+            return _database_error_response(exc)
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
@@ -268,6 +288,7 @@ class CustomLoginAPIView(APIView):
 
 class TelegramWebAppLoginAPIView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
         init_data = (request.data.get("initData") or "").strip()
@@ -291,26 +312,29 @@ class TelegramWebAppLoginAPIView(APIView):
         first_name = (telegram_user.get("first_name") or "").strip()
         last_name = (telegram_user.get("last_name") or "").strip()
 
-        user, created = User.objects.get_or_create(username=username)
-        if created:
-            user.first_name = first_name
-            user.last_name = last_name
-            user.email = f"{username}@telegram.local"
-            user.set_unusable_password()
-            user.save(update_fields=["first_name", "last_name", "email", "password"])
-        else:
-            changed_fields = []
-            if first_name and user.first_name != first_name:
+        try:
+            user, created = User.objects.get_or_create(username=username)
+            if created:
                 user.first_name = first_name
-                changed_fields.append("first_name")
-            if last_name and user.last_name != last_name:
                 user.last_name = last_name
-                changed_fields.append("last_name")
-            if changed_fields:
-                user.save(update_fields=changed_fields)
+                user.email = f"{username}@telegram.local"
+                user.set_unusable_password()
+                user.save(update_fields=["first_name", "last_name", "email", "password"])
+            else:
+                changed_fields = []
+                if first_name and user.first_name != first_name:
+                    user.first_name = first_name
+                    changed_fields.append("first_name")
+                if last_name and user.last_name != last_name:
+                    user.last_name = last_name
+                    changed_fields.append("last_name")
+                if changed_fields:
+                    user.save(update_fields=changed_fields)
 
-        role = self._ensure_role_profile(user, role_hint, first_name, last_name, telegram_id)
-        token, _ = Token.objects.get_or_create(user=user)
+            role = self._ensure_role_profile(user, role_hint, first_name, last_name, telegram_id)
+            token, _ = Token.objects.get_or_create(user=user)
+        except DatabaseError as exc:
+            return _database_error_response(exc)
 
         return Response(
             {
