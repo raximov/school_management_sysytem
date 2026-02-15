@@ -82,6 +82,7 @@ def _parse_postgres_url(database_url):
     query = parse_qs(parsed.query or "")
     sslmode = _first_non_empty(*(query.get("sslmode") or []))
     connect_timeout = _first_non_empty(*(query.get("connect_timeout") or []))
+    channel_binding = _first_non_empty(*(query.get("channel_binding") or []))
 
     config = {
         "ENGINE": "django.db.backends.postgresql",
@@ -96,6 +97,8 @@ def _parse_postgres_url(database_url):
         config["SSLMODE"] = sslmode
     if connect_timeout:
         config["CONNECT_TIMEOUT"] = connect_timeout
+    if channel_binding:
+        config["CHANNEL_BINDING"] = channel_binding
 
     return config
 
@@ -177,6 +180,11 @@ def _build_database_settings():
         os.getenv("DB_SSLMODE"),
         "require",
     )
+    channel_binding = _first_non_empty(
+        parsed_url.get("CHANNEL_BINDING"),
+        os.getenv("PGCHANNELBINDING"),
+        os.getenv("DB_CHANNEL_BINDING"),
+    )
     connect_timeout_raw = _first_non_empty(
         os.getenv("DB_CONNECT_TIMEOUT"),
         parsed_url.get("CONNECT_TIMEOUT"),
@@ -196,6 +204,8 @@ def _build_database_settings():
     options = {}
     if sslmode:
         options["sslmode"] = sslmode
+    if channel_binding:
+        options["channel_binding"] = channel_binding
 
     try:
         connect_timeout = int(connect_timeout_raw)
