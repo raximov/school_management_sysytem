@@ -256,10 +256,10 @@ class CustomLoginAPIView(APIView):
     def get(self, request):
         # HTML sahifa render
         if request.user.is_authenticated:
-            if hasattr(request.user, 'student_profile'):
-                redirect_url = reverse_lazy('student_profile')
-            elif hasattr(request.user, 'teacher_profile'):
+            if hasattr(request.user, 'teacher_profile'):
                 redirect_url = reverse_lazy('teacher_profile')
+            elif hasattr(request.user, 'student_profile'):
+                redirect_url = reverse_lazy('student_profile')
             else:
                 redirect_url = reverse_lazy('home')
             return Response({"authenticated": True, "redirect_url": str(redirect_url)})
@@ -282,10 +282,10 @@ class CustomLoginAPIView(APIView):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            if hasattr(user, 'student_profile'):
-                redirect_url = reverse_lazy('student_profile')
-            elif hasattr(user, 'teacher_profile'):
+            if hasattr(user, 'teacher_profile'):
                 redirect_url = reverse_lazy('teacher_profile')
+            elif hasattr(user, 'student_profile'):
+                redirect_url = reverse_lazy('student_profile')
             else:
                 redirect_url = reverse_lazy('home')
 
@@ -366,25 +366,26 @@ class TelegramWebAppLoginAPIView(APIView):
         )
 
     def _ensure_role_profile(self, user, role_hint, first_name, last_name, telegram_id):
-        if hasattr(user, "teacher_profile"):
-            return "teacher"
-        if hasattr(user, "student_profile"):
-            return "student"
-
         student_name = self._fit_to_model(Student, "name", first_name or "Student")
         student_last_name = self._fit_to_model(Student, "last_name", last_name or "User")
         teacher_name = self._fit_to_model(Teacher, "name", first_name or "Teacher")
         teacher_last_name = self._fit_to_model(Teacher, "last_name", last_name or "User")
 
         teacher_ids = self._parse_teacher_ids(os.getenv("TELEGRAM_TEACHER_IDS", ""))
-        if role_hint == "teacher" and str(telegram_id) in teacher_ids:
-            Teacher.objects.create(
-                user=user,
-                name=teacher_name,
-                last_name=teacher_last_name,
-                email=user.email or f"{user.username}@telegram.local",
-            )
+        if str(telegram_id) in teacher_ids:
+            if not hasattr(user, "teacher_profile"):
+                Teacher.objects.create(
+                    user=user,
+                    name=teacher_name,
+                    last_name=teacher_last_name,
+                    email=user.email or f"{user.username}@telegram.local",
+                )
             return "teacher"
+
+        if hasattr(user, "teacher_profile"):
+            return "teacher"
+        if hasattr(user, "student_profile"):
+            return "student"
 
         Student.objects.create(
             user=user,
@@ -475,10 +476,10 @@ class PostLoginRedirectAPIView(APIView):
     template_name = 'accounts/login.html'
 
     def get(self, request):
-        if hasattr(request.user, 'student_profile'):
-            return Response({"redirect_url": reverse_lazy('student_profile')})
-        elif hasattr(request.user, 'teacher_profile'):
+        if hasattr(request.user, 'teacher_profile'):
             return Response({"redirect_url": reverse_lazy('teacher_profile')})
+        elif hasattr(request.user, 'student_profile'):
+            return Response({"redirect_url": reverse_lazy('student_profile')})
         return Response({"redirect_url": reverse_lazy('home')})
 
 
@@ -529,10 +530,10 @@ class ProfileRedirectAPIView(APIView):
     renderer_classes = [TemplateHTMLRenderer]
 
     def get(self, request):
-        if hasattr(request.user, 'student_profile'):
-            return Response({}, template_name='accounts/student_profile.html')
-        elif hasattr(request.user, 'teacher_profile'):
+        if hasattr(request.user, 'teacher_profile'):
             return Response({}, template_name='accounts/teacher_profile.html')
+        elif hasattr(request.user, 'student_profile'):
+            return Response({}, template_name='accounts/student_profile.html')
         return Response({}, template_name='home.html')
 
 
