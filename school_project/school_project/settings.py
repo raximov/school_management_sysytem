@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 
@@ -58,6 +59,160 @@ def _split_csv_env(name, default_values):
     if not raw:
         return default_values
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _first_non_empty(*values):
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _parse_postgres_url(database_url):
+    if not database_url:
+        return {}
+
+    parsed = urlparse(database_url)
+    if (parsed.scheme or "").lower() not in {"postgres", "postgresql"}:
+        return {}
+
+    query = parse_qs(parsed.query or "")
+    sslmode = _first_non_empty(*(query.get("sslmode") or []))
+    connect_timeout = _first_non_empty(*(query.get("connect_timeout") or []))
+
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": unquote((parsed.path or "").lstrip("/")),
+        "USER": unquote(parsed.username or ""),
+        "PASSWORD": unquote(parsed.password or ""),
+        "HOST": parsed.hostname or "",
+        "PORT": str(parsed.port or ""),
+    }
+
+    if sslmode:
+        config["SSLMODE"] = sslmode
+    if connect_timeout:
+        config["CONNECT_TIMEOUT"] = connect_timeout
+
+    return config
+
+
+def _build_database_settings():
+    database_url = _first_non_empty(
+        os.getenv("DATABASE_URL"),
+        os.getenv("POSTGRES_URL"),
+        os.getenv("DATABASE_URL_UNPOOLED"),
+        os.getenv("POSTGRES_URL_NON_POOLING"),
+    )
+    parsed_url = _parse_postgres_url(database_url)
+
+    has_postgres_hint = bool(
+        _first_non_empty(
+            database_url,
+            os.getenv("DB_HOST"),
+            os.getenv("POSTGRES_HOST"),
+            os.getenv("PGHOST"),
+            os.getenv("PGHOST_UNPOOLED"),
+            os.getenv("DB_NAME"),
+            os.getenv("POSTGRES_DATABASE"),
+            os.getenv("PGDATABASE"),
+        )
+    )
+
+    engine = _first_non_empty(
+        os.getenv("DB_ENGINE"),
+        parsed_url.get("ENGINE"),
+        "django.db.backends.postgresql" if has_postgres_hint else "",
+    )
+
+    if not engine:
+        engine = "django.db.backends.sqlite3"
+
+    if engine == "django.db.backends.sqlite3":
+        sqlite_name = _first_non_empty(os.getenv("DB_NAME"))
+        return {
+            "ENGINE": engine,
+            "NAME": sqlite_name or (BASE_DIR / "db.sqlite3"),
+        }
+
+    name = _first_non_empty(
+        os.getenv("DB_NAME"),
+        parsed_url.get("NAME"),
+        os.getenv("POSTGRES_DATABASE"),
+        os.getenv("PGDATABASE"),
+    )
+    user = _first_non_empty(
+        os.getenv("DB_USER"),
+        parsed_url.get("USER"),
+        os.getenv("POSTGRES_USER"),
+        os.getenv("PGUSER"),
+    )
+    password = _first_non_empty(
+        os.getenv("DB_PASSWORD"),
+        parsed_url.get("PASSWORD"),
+        os.getenv("POSTGRES_PASSWORD"),
+        os.getenv("PGPASSWORD"),
+    )
+    host = _first_non_empty(
+        os.getenv("DB_HOST"),
+        parsed_url.get("HOST"),
+        os.getenv("POSTGRES_HOST"),
+        os.getenv("PGHOST"),
+        os.getenv("PGHOST_UNPOOLED"),
+    )
+    port = _first_non_empty(
+        os.getenv("DB_PORT"),
+        parsed_url.get("PORT"),
+        os.getenv("POSTGRES_PORT"),
+        os.getenv("PGPORT"),
+        "5432",
+    )
+
+    sslmode = _first_non_empty(
+        os.getenv("DB_SSLMODE"),
+        parsed_url.get("SSLMODE"),
+        os.getenv("PGSSLMODE"),
+        "require",
+    )
+    connect_timeout_raw = _first_non_empty(
+        os.getenv("DB_CONNECT_TIMEOUT"),
+        parsed_url.get("CONNECT_TIMEOUT"),
+        "15",
+    )
+    conn_max_age_raw = _first_non_empty(os.getenv("DB_CONN_MAX_AGE"), "60")
+
+    db_settings = {
+        "ENGINE": engine,
+        "NAME": name,
+        "USER": user,
+        "PASSWORD": password,
+        "HOST": host,
+        "PORT": port,
+    }
+
+    options = {}
+    if sslmode:
+        options["sslmode"] = sslmode
+
+    try:
+        connect_timeout = int(connect_timeout_raw)
+    except (TypeError, ValueError):
+        connect_timeout = 15
+    options["connect_timeout"] = max(1, connect_timeout)
+
+    if options:
+        db_settings["OPTIONS"] = options
+
+    try:
+        conn_max_age = int(conn_max_age_raw)
+    except (TypeError, ValueError):
+        conn_max_age = 60
+    db_settings["CONN_MAX_AGE"] = max(0, conn_max_age)
+
+    return db_settings
 
 
 ALLOWED_HOSTS = _split_csv_env(
@@ -186,16 +341,7 @@ WSGI_APPLICATION = 'school_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.sqlite3'),
-        'NAME': os.getenv('DB_NAME', BASE_DIR / 'db.sqlite3'),
-        'USER': os.getenv('DB_USER', ''),
-        'PASSWORD': os.getenv('DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', ''),
-        'PORT': os.getenv('DB_PORT', ''),
-    }
-}
+DATABASES = {"default": _build_database_settings()}
 
 
 # Password validation
