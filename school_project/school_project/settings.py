@@ -123,8 +123,8 @@ def _build_database_settings():
     )
 
     engine = _first_non_empty(
-        os.getenv("DB_ENGINE"),
         parsed_url.get("ENGINE"),
+        os.getenv("DB_ENGINE"),
         "django.db.backends.postgresql" if has_postgres_hint else "",
     )
 
@@ -139,42 +139,42 @@ def _build_database_settings():
         }
 
     name = _first_non_empty(
-        os.getenv("DB_NAME"),
         parsed_url.get("NAME"),
         os.getenv("POSTGRES_DATABASE"),
         os.getenv("PGDATABASE"),
+        os.getenv("DB_NAME"),
     )
     user = _first_non_empty(
-        os.getenv("DB_USER"),
         parsed_url.get("USER"),
         os.getenv("POSTGRES_USER"),
         os.getenv("PGUSER"),
+        os.getenv("DB_USER"),
     )
     password = _first_non_empty(
-        os.getenv("DB_PASSWORD"),
         parsed_url.get("PASSWORD"),
         os.getenv("POSTGRES_PASSWORD"),
         os.getenv("PGPASSWORD"),
+        os.getenv("DB_PASSWORD"),
     )
     host = _first_non_empty(
-        os.getenv("DB_HOST"),
         parsed_url.get("HOST"),
         os.getenv("POSTGRES_HOST"),
         os.getenv("PGHOST"),
         os.getenv("PGHOST_UNPOOLED"),
+        os.getenv("DB_HOST"),
     )
     port = _first_non_empty(
-        os.getenv("DB_PORT"),
         parsed_url.get("PORT"),
         os.getenv("POSTGRES_PORT"),
         os.getenv("PGPORT"),
+        os.getenv("DB_PORT"),
         "5432",
     )
 
     sslmode = _first_non_empty(
-        os.getenv("DB_SSLMODE"),
         parsed_url.get("SSLMODE"),
         os.getenv("PGSSLMODE"),
+        os.getenv("DB_SSLMODE"),
         "require",
     )
     connect_timeout_raw = _first_non_empty(
