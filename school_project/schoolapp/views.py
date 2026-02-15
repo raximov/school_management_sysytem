@@ -50,9 +50,12 @@ from .serializers import (
 
 def _database_error_response(exc):
     detail = "Database is not ready. Check DB env variables and run migrations."
-    if settings.DEBUG:
+    if settings.DEBUG or os.getenv("AUTH_DEBUG_ERRORS", "false").strip().lower() == "true":
         detail = f"Database error: {exc}"
-    return Response({"detail": detail}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response(
+        {"detail": detail, "errorType": exc.__class__.__name__},
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
 
 
 class SafeObtainAuthToken(ObtainAuthToken):
@@ -65,9 +68,12 @@ class SafeObtainAuthToken(ObtainAuthToken):
             return _database_error_response(exc)
         except Exception as exc:  # noqa: BLE001
             detail = "Auth endpoint failed before token creation."
-            if settings.DEBUG:
+            if settings.DEBUG or os.getenv("AUTH_DEBUG_ERRORS", "false").strip().lower() == "true":
                 detail = f"Auth endpoint error: {exc}"
-            return Response({"detail": detail}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"detail": detail, "errorType": exc.__class__.__name__},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
