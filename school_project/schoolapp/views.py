@@ -63,6 +63,11 @@ class SafeObtainAuthToken(ObtainAuthToken):
             return super().post(request, *args, **kwargs)
         except DatabaseError as exc:
             return _database_error_response(exc)
+        except Exception as exc:  # noqa: BLE001
+            detail = "Auth endpoint failed before token creation."
+            if settings.DEBUG:
+                detail = f"Auth endpoint error: {exc}"
+            return Response({"detail": detail}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
