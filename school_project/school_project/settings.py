@@ -45,10 +45,13 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-tpv!-0fd$4(yd1nvxt5!t%4r3ou*76wy=d(+7$q73xcx1ayt%%'
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "django-insecure-tpv!-0fd$4(yd1nvxt5!t%4r3ou*76wy=d(+7$q73xcx1ayt%%",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "false").strip().lower() == "true"
 
 def _split_csv_env(name, default_values):
     raw = os.getenv(name, "").strip()
@@ -63,6 +66,7 @@ ALLOWED_HOSTS = _split_csv_env(
         "192.168.100.167",
         "localhost",
         "127.0.0.1",
+        ".vercel.app",
         ".trycloudflare.com",
         ".ngrok-free.app",
         ".ngrok.app",
@@ -133,19 +137,28 @@ CORS_ALLOWED_ORIGINS = _split_csv_env(
 )
 
 # For development only
-CORS_ALLOW_ALL_ORIGINS = os.getenv("DJANGO_CORS_ALLOW_ALL_ORIGINS", "true").lower() == "true"
+CORS_ALLOW_ALL_ORIGINS = os.getenv(
+    "DJANGO_CORS_ALLOW_ALL_ORIGINS",
+    "true" if DEBUG else "false",
+).lower() == "true"
 CORS_ALLOW_CREDENTIALS = True
 
 
 # Important: Configure CSRF for cross-origin requests
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_SECURE = os.getenv(
+    "DJANGO_CSRF_COOKIE_SECURE",
+    "false" if DEBUG else "true",
+).lower() == "true"
 CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access to CSRF cookie
 CSRF_COOKIE_SAMESITE = 'Lax'  # Allow cross-site requests
 CSRF_USE_SESSIONS = False  # Use cookie instead of session
 CSRF_COOKIE_NAME = 'csrftoken'
 
 # Session settings (if using session authentication)
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_SECURE = os.getenv(
+    "DJANGO_SESSION_COOKIE_SECURE",
+    "false" if DEBUG else "true",
+).lower() == "true"
 SESSION_COOKIE_HTTPONLY = False
 SESSION_COOKIE_SAMESITE = 'Lax'
 
