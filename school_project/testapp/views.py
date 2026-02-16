@@ -31,38 +31,52 @@ from random import sample
 from collections import defaultdict
 
 
+def get_teacher_profile_or_403(user):
+    if not getattr(user, "is_authenticated", False):
+        raise PermissionDenied("Authentication credentials were not provided.")
+
+    if not hasattr(user, "teacher_profile"):
+        raise PermissionDenied("Only teacher users can access this endpoint.")
+
+    return user.teacher_profile
+
+
 
 
 
 
 # STEP 1: Create and manage Tests
 class TestViewSet(viewsets.ModelViewSet):
-    #permission_classes = [permissions.IsAuthenticated, IsTeacher]
+    permission_classes = [permissions.IsAuthenticated]
     queryset = Test.objects.all()
     serializer_class = TestSerializer
 
     def get_queryset(self):
-        return Test.objects.filter(teacher=self.request.user.teacher_profile)
+        teacher = get_teacher_profile_or_403(self.request.user)
+        return Test.objects.filter(teacher=teacher)
 
     def perform_create(self, serializer):
-        # Only create the Test itself
-        serializer.save(teacher=self.request.user.teacher_profile)
+        teacher = get_teacher_profile_or_403(self.request.user)
+        serializer.save(teacher=teacher)
 
     def retrieve(self, request, *args, **kwargs):
         test = self.get_object()
-        if test.teacher != request.user.teacher_profile:
+        teacher = get_teacher_profile_or_403(request.user)
+        if test.teacher != teacher:
             raise PermissionDenied("Siz bu testni ko‘ra olmaysiz.")
         return super().retrieve(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
         test = self.get_object()
-        if test.teacher != request.user.teacher_profile:
+        teacher = get_teacher_profile_or_403(request.user)
+        if test.teacher != teacher:
             raise PermissionDenied("Siz bu testni o‘zgartira olmaysiz.")
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         test = self.get_object()
-        if test.teacher != request.user.teacher_profile:
+        teacher = get_teacher_profile_or_403(request.user)
+        if test.teacher != teacher:
             raise PermissionDenied("Siz bu testni o‘chira olmaysiz.")
         return super().destroy(request, *args, **kwargs)
 
@@ -70,10 +84,11 @@ class TestViewSet(viewsets.ModelViewSet):
 # STEP 2: Create and manage Questions
 class QuestionViewSet(viewsets.ModelViewSet):
     serializer_class = QuestionSerializer
-    #permission_classes = [permissions.IsAuthenticated, IsTeacher]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Question.objects.filter(test__teacher=self.request.user.teacher_profile)
+        teacher = get_teacher_profile_or_403(self.request.user)
+        queryset = Question.objects.filter(test__teacher=teacher)
         
         # Agar query parametrlarda test id berilgan bo'lsa, filter qilamiz
         test_id = self.request.query_params.get('test')
@@ -83,24 +98,27 @@ class QuestionViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        teacher = get_teacher_profile_or_403(self.request.user)
         test_id = self.request.data.get('test')
-        test = get_object_or_404(Test, id=test_id, teacher=self.request.user.teacher_profile)
+        test = get_object_or_404(Test, id=test_id, teacher=teacher)
         serializer.save(test=test)
 
     def perform_update(self, serializer):
+        teacher = get_teacher_profile_or_403(self.request.user)
         test_id = self.request.data.get('test')
-        test = get_object_or_404(Test, id=test_id, teacher=self.request.user.teacher_profile)
+        test = get_object_or_404(Test, id=test_id, teacher=teacher)
         serializer.save(test=test)
 
 
 # STEP 3: Create and manage Answers
 class AnswerViewSet(viewsets.ModelViewSet):
     serializer_class = AnswerSerializer
-    #permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        teacher = get_teacher_profile_or_403(self.request.user)
         queryset = Answer.objects.filter(
-            question__test__teacher=self.request.user.teacher_profile
+            question__test__teacher=teacher
         )
 
         # Agar query parametrlarda question id berilgan bo'lsa, filter qilamiz
@@ -111,20 +129,22 @@ class AnswerViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        teacher = get_teacher_profile_or_403(self.request.user)
         question_id = self.request.data.get('question')
         question = get_object_or_404(
             Question,
             id=question_id,
-            test__teacher=self.request.user.teacher_profile
+            test__teacher=teacher
         )
         serializer.save(question=question)
 
     def perform_update(self, serializer):
+        teacher = get_teacher_profile_or_403(self.request.user)
         question_id = self.request.data.get('question')
         question = get_object_or_404(
             Question,
             id=question_id,
-            test__teacher=self.request.user.teacher_profile
+            test__teacher=teacher
         )
         serializer.save(question=question)
 
@@ -214,7 +234,7 @@ class TeacherTestResultsView(APIView):
     # #permission_classes = [IsAuthenticated, IsTeacher]
 
     def get(self, request, test_id):
-        teacher = request.user.teacher_profile
+        teacher = get_teacher_profile_or_403(request.user)
         test = get_object_or_404(Test, id=test_id, teacher=teacher)
         attempts = TestAttempt.objects.filter(test=test).select_related('student')
         serializer = TestAttemptResultSerializer(attempts, many=True)
@@ -273,11 +293,11 @@ class EnrollmentTestViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
-        teacher = self.request.user.teacher_profile
+        teacher = get_teacher_profile_or_403(self.request.user)
         return EnrollmentTest.objects.filter(teacher=teacher)
 
     def perform_create(self, serializer):
-        teacher = self.request.user.teacher_profile
+        teacher = get_teacher_profile_or_403(self.request.user)
         course_id = self.request.data.get('course')
 
         try:
@@ -288,7 +308,7 @@ class EnrollmentTestViewSet(viewsets.ModelViewSet):
         serializer.save(teacher=teacher, course=course)
 
     def perform_update(self, serializer):
-        teacher = self.request.user.teacher_profile
+        teacher = get_teacher_profile_or_403(self.request.user)
         course_id = self.request.data.get('course')
 
         if course_id:
@@ -302,7 +322,7 @@ class EnrollmentTestViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        teacher = request.user.teacher_profile
+        teacher = get_teacher_profile_or_403(request.user)
         if instance.teacher != teacher:
             raise PermissionDenied("Siz bu enrollment testni o'chira olmaysiz.")
         return super().destroy(request, *args, **kwargs)
