@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Test, Question, Answer, StudentAnswer, TestAttempt, EnrollmentTest
-from schoolapp.serializers import CourseSerializer, TeacherSerializer
+from schoolapp.serializers import CourseSerializer
 from schoolapp.models import Course
 
 class TestSerializer(serializers.ModelSerializer):
@@ -34,23 +34,44 @@ class EnrollmentTestSerializer(serializers.ModelSerializer):
     # GET uchun nested
     course = CourseSerializer(read_only=True)
     test = TestSerializer(read_only=True)
+    teacher_id = serializers.IntegerField(source='teacher_id', read_only=True)
 
     # POST/PUT uchun id
     course_id = serializers.PrimaryKeyRelatedField(
-        queryset=Course.objects.all(), write_only=True, source='course'
+        queryset=Course.objects.all(), write_only=True, source='course', required=False
     )
     test_id = serializers.PrimaryKeyRelatedField(
-        queryset=Test.objects.all(), write_only=True, source='test'
+        queryset=Test.objects.all(), write_only=True, source='test', required=False
     )
-    teacher = serializers.HiddenField(default=serializers.CurrentUserDefault())
 
     class Meta:
         model = EnrollmentTest
         fields = [
             'id', 'course', 'test',
             'course_id', 'test_id',
-            'start_date', 'end_date', 'attempt_count', 'teacher'
+            'start_date', 'end_date', 'attempt_count', 'teacher_id'
         ]
+
+    def to_internal_value(self, data):
+        """
+        Accept both payload variants:
+        - {"course_id": 1, "test_id": 2}
+        - {"course": 1, "test": 2}
+        """
+        if isinstance(data, dict):
+            mutable = dict(data)
+
+            course_value = mutable.get('course')
+            if 'course_id' not in mutable and course_value is not None and not isinstance(course_value, dict):
+                mutable['course_id'] = course_value
+
+            test_value = mutable.get('test')
+            if 'test_id' not in mutable and test_value is not None and not isinstance(test_value, dict):
+                mutable['test_id'] = test_value
+
+            data = mutable
+
+        return super().to_internal_value(data)
 
 class StudentAnswerSerializer(serializers.ModelSerializer):
     class Meta:

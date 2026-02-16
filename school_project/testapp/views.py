@@ -18,7 +18,7 @@ from django.views.generic import TemplateView, ListView
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, NotFound
+from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 from django.http import HttpResponse
 from schoolapp.models import Enrollment, Course
 from django.shortcuts import render, get_object_or_404, redirect
@@ -298,27 +298,38 @@ class EnrollmentTestViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         teacher = get_teacher_profile_or_403(self.request.user)
-        course_id = self.request.data.get('course')
+        course = serializer.validated_data.get('course')
+        test = serializer.validated_data.get('test')
 
-        try:
-            course = Course.objects.get(id=course_id, teacher=teacher)
-        except Course.DoesNotExist:
+        if course is None:
+            raise ValidationError({"course_id": ["This field is required."]})
+        if test is None:
+            raise ValidationError({"test_id": ["This field is required."]})
+        if course.teacher_id != teacher.id:
             raise PermissionDenied("Siz bu kursni boshqara olmaysiz.")
+        if test.teacher_id != teacher.id:
+            raise PermissionDenied("Siz bu testni kursga biriktira olmaysiz.")
 
-        serializer.save(teacher=teacher, course=course)
+        if EnrollmentTest.objects.filter(teacher=teacher, course=course, test=test).exists():
+            raise ValidationError({"detail": "This test is already assigned to the selected course."})
+        serializer.save(teacher=teacher, course=course, test=test)
 
     def perform_update(self, serializer):
         teacher = get_teacher_profile_or_403(self.request.user)
-        course_id = self.request.data.get('course')
+        instance = self.get_object()
 
-        if course_id:
-            try:
-                course = Course.objects.get(id=course_id, teacher=teacher)
-            except Course.DoesNotExist:
-                raise PermissionDenied("Siz bu kursni boshqara olmaysiz.")
-            serializer.save(course=course)
-        else:
-            serializer.save()
+        if instance.teacher_id != teacher.id:
+            raise PermissionDenied("Siz bu enrollment testni tahrir qila olmaysiz.")
+
+        course = serializer.validated_data.get('course', instance.course)
+        test = serializer.validated_data.get('test', instance.test)
+
+        if course.teacher_id != teacher.id:
+            raise PermissionDenied("Siz bu kursni boshqara olmaysiz.")
+        if test.teacher_id != teacher.id:
+            raise PermissionDenied("Siz bu testni kursga biriktira olmaysiz.")
+
+        serializer.save(teacher=teacher, course=course, test=test)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
