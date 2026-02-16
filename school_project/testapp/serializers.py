@@ -34,7 +34,7 @@ class EnrollmentTestSerializer(serializers.ModelSerializer):
     # GET uchun nested
     course = CourseSerializer(read_only=True)
     test = TestSerializer(read_only=True)
-    teacher_id = serializers.IntegerField(source='teacher_id', read_only=True)
+    teacher_id = serializers.IntegerField(read_only=True)
 
     # POST/PUT uchun id
     course_id = serializers.PrimaryKeyRelatedField(
