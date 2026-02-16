@@ -109,49 +109,13 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
     permission_classes = [IsAuthenticated]
-    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
-    template_name = 'enrollment_list.html'
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        if request.accepted_renderer.format == 'html':
-            return Response({'enrollments': queryset}, template_name=self.template_name)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    def dispatch(self, request, *args, **kwargs):
-        """HTML formdan kelgan _method ni HTTP methodga aylantirish"""
-        if "_method" in request.POST:
-            method = request.POST["_method"].lower()
-            if method == "delete":
-                request.method = "DELETE"
-            elif method == "put":
-                request.method = "PUT"
-        return super().dispatch(request, *args, **kwargs)
+    renderer_classes = [JSONRenderer]
 
     def perform_create(self, serializer):
         serializer.save()
 
     def perform_update(self, serializer):
         serializer.save()
-
-    def create(self, request, *args, **kwargs):
-        resp = super().create(request, *args, **kwargs)
-        if request.accepted_renderer.format == 'html':
-            return redirect('enrollment-list')
-        return resp
-
-    def update(self, request, *args, **kwargs):
-        resp = super().update(request, *args, **kwargs)
-        if request.accepted_renderer.format == 'html':
-            return redirect('enrollment-list')
-        return resp
-
-    def destroy(self, request, *args, **kwargs):
-        resp = super().destroy(request, *args, **kwargs)
-        if request.accepted_renderer.format == 'html':
-            return redirect('enrollment-list')
-        return resp
 
 
 class RegisterStudentView(APIView):
