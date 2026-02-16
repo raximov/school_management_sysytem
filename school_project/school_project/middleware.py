@@ -40,21 +40,26 @@ class ApiExceptionToJsonMiddleware:
 
         if self._is_api_request(request):
             content_type = (response.get("Content-Type") or "").lower()
-            if response.status_code >= 400 and "text/html" in content_type:
-                detail = "Backend returned HTML instead of JSON."
+            if "text/html" in content_type:
                 debug_errors = settings.DEBUG or os.getenv("API_DEBUG_ERRORS", "false").strip().lower() == "true"
+                detail = (
+                    "Backend returned HTML instead of JSON "
+                    f"for {request.method} {request.path} (HTTP {response.status_code})."
+                )
                 if debug_errors:
                     body_preview = ""
                     try:
-                        body_preview = (response.content or b"")[:180].decode("utf-8", errors="ignore")
+                        body_preview = (response.content or b"")[:220].decode("utf-8", errors="ignore")
                     except Exception:  # noqa: BLE001
                         body_preview = ""
                     if body_preview:
-                        detail = f"Backend returned HTML instead of JSON. Preview: {body_preview}"
+                        detail = f"{detail} Preview: {body_preview}"
 
+                # If HTML returned with 2xx/3xx on an API route, treat it as server error for API clients.
+                status_code = response.status_code if response.status_code >= 400 else 500
                 return JsonResponse(
                     {"detail": detail, "errorType": "HtmlErrorResponse"},
-                    status=response.status_code,
+                    status=status_code,
                 )
 
         return response
