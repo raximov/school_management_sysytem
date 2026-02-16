@@ -62,6 +62,27 @@ class StudentStartAttemptAPIView(APIView):
             status=Test.STATUS_PUBLISHED,
         )
 
+        # Validate test payload before creating attempt; choice questions must have options.
+        invalid_questions: list[str] = []
+        for question in test.questions.all():
+            answers = list(question.answer_options.all())
+            if question.question_type in {"OC", "MC"}:
+                non_empty_options = [answer for answer in answers if (answer.text or "").strip()]
+                correct_non_empty = [answer for answer in non_empty_options if answer.is_correct]
+                if len(non_empty_options) < 2 or len(correct_non_empty) == 0:
+                    invalid_questions.append(
+                        f"Question {question.id} is invalid: choice questions need >=2 options and >=1 correct option."
+                    )
+
+        if invalid_questions:
+            return Response(
+                {
+                    "detail": "Test configuration is invalid for student attempt.",
+                    "invalid_questions": invalid_questions,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Start endpoint should always create a fresh attempt.
         attempt = TestAttempt.objects.create(student=student, test=test)
         questions_payload = []
