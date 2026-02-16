@@ -1,10 +1,28 @@
 from django.db import models
+from django.core.validators import MaxValueValidator, MinValueValidator
 from schoolapp.models import Teacher, Student, Enrollment, Course
 
 class Test(models.Model):
+    STATUS_DRAFT = "draft"
+    STATUS_PUBLISHED = "published"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_ARCHIVED, "Archived"),
+    ]
+
     title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True)
+    time_limit_sec = models.PositiveIntegerField(default=1800)
+    passing_percent = models.PositiveSmallIntegerField(
+        default=60,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+    )
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='tests')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.title

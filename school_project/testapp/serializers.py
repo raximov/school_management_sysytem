@@ -6,8 +6,18 @@ from schoolapp.models import Course
 class TestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
-        fields = ['id', 'title', 'teacher']
-        read_only_fields = ['teacher']
+        fields = [
+            'id',
+            'title',
+            'description',
+            'status',
+            'time_limit_sec',
+            'passing_percent',
+            'teacher',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['teacher', 'created_at', 'updated_at']
 
 class QuestionSerializer(serializers.ModelSerializer):
     class Meta:

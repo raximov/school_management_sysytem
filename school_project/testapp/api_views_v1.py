@@ -32,12 +32,16 @@ class StudentAvailableTestsAPIView(APIView):
             id__in=EnrollmentTest.objects.filter(
                 course__in=enrollments.values_list("course_id", flat=True)
             ).values_list("test_id", flat=True)
-        ).distinct()
+        ).filter(status=Test.STATUS_PUBLISHED).distinct()
 
         payload = [
             {
                 "id": t.id,
                 "title": t.title,
+                "description": t.description,
+                "status": t.status,
+                "time_limit_sec": t.time_limit_sec,
+                "passing_percent": t.passing_percent,
                 "teacher": getattr(t.teacher, "id", None),
                 "question_count": t.questions.count(),
                 "created_at": t.created_at,
@@ -55,6 +59,7 @@ class StudentStartAttemptAPIView(APIView):
         test = get_object_or_404(
             Test.objects.prefetch_related("questions__answer_options"),
             id=test_id,
+            status=Test.STATUS_PUBLISHED,
         )
 
         # Start endpoint should always create a fresh attempt.
@@ -109,6 +114,8 @@ class StudentStartAttemptAPIView(APIView):
                 "test": {
                     "id": test.id,
                     "title": test.title,
+                    "description": test.description,
+                    "time_limit_sec": test.time_limit_sec,
                     "questions": questions_payload,
                 },
             },
